@@ -235,7 +235,7 @@ class ZZPlotter:
         axes = self._get_axes(Canvas, **kwargs)
         axes_labs = "per{}{}_{}to{}{}_{}".format(kwargs["step"], unit, kwargs["xlow"], kwargs["xhigh"], unit, axes)
 
-        direc = "ZZAnalysis/plots/{}".format(datetime.date.today())
+        direc = "plots/{}".format(datetime.date.today())
         os.makedirs(direc, exist_ok=True)
 
         plot_path = "{}_{}_CONFIG_TEST.png".format(kwargs["prop"],
