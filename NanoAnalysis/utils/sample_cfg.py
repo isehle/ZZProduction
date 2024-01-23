@@ -25,7 +25,7 @@ sample_info = {
     "Z+X": dict(
         samples    = None,
         fill_color = "#669966",
-        line_color = "003300"
+        line_color = "#003300"
     )
 }
 

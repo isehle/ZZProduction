@@ -51,7 +51,7 @@ class ZZHists:
         """Return dictionary of histogram properties based off
         of the histogram info and the samplename."""
         props = dict(
-            nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
+            #nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
             xlow  = info["xlow"],
             xhigh = info["xhigh"],
         )
@@ -98,7 +98,8 @@ class ZZHists:
         hist = wgt.Define(which, "{}[{}]".format(col, idx)) # --> Need to broadcast "which" (a scalar float) to an RVec in order to multiply it by the RVec weight
         hist = hist.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
         
-        hist_weighted = hist.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
+        #hist_weighted = hist.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
+        hist_weighted = hist.Histo1D((props["name"], props["title"], 233, 70., 1002.), which+"_vec", "weight").GetValue()
 
         return hist_weighted
 
@@ -200,10 +201,11 @@ class ZZPlotter:
             HStack.Add(h, "HISTO")
 
         yhmax  = math.ceil(max(HStack.GetMaximum(), 0.))
-        HStack.SetMinimum(1.0)
+        #HStack.SetMinimum(1.0)
         HStack.SetMaximum(yhmax)
         HStack.Draw("histo")
         HStack.GetXaxis().SetRangeUser(hist_info["xlow"], hist_info["xhigh"])
+        HStack.GetYaxis().SetRangeUser(0.0, yhmax)
 
         return HStack
     
@@ -258,9 +260,9 @@ class ZZPlotter:
         direc = "plots/{}".format(datetime.date.today())
         os.makedirs(direc, exist_ok=True)
 
-        plot_path = "{}_{}_CONFIG_TEST.png".format(kwargs["prop"],
-                                                  axes_labs,
-                                                )
+        plot_path = "{}_{}_ZpXtest_explicitHistRange_yAxis.png".format(kwargs["prop"],
+                                                     axes_labs,
+                                                    )
 
         Canvas.SaveAs(os.path.join(direc, plot_path))
 
@@ -286,6 +288,64 @@ class ZZPlotter:
 
         self._save_plot(Canvas, **kwargs["hist_info"])
 
+def get_rdfs(fname):
+    Runs = ROOT.RDataFrame("Runs", fname)
+    df = ROOT.RDataFrame("Events", fname)
+    df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
+
+    filt = df.Filter("(bestCandIdx!=-1)&&(HLT_passZZ4l)")
+    wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
+
+    rdf = wgt.Define("ZZ", "ZZCand_mass[bestCandIdx]")
+    rdf = rdf.Define("ZZ_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), ZZ);") 
+
+    return rdf
+
+def get_zx_rdf(info):
+    sample_dict = info["proc_info"]["H(125)"]["samples"]
+    samples = list(sample_dict.items())
+    proc_0, fname_0 = samples[0][0], samples[0][1]
+
+    hist = get_rdfs(fname_0).Histo1D(("mass_"+proc_0, "mass_"+proc_0, 233, 70., 1002.), "ZZ_vec", "weight").GetValue()
+    Hist = hist.Clone()
+    for sample in samples[1:]:
+        proc, fname = sample
+        hist = get_rdfs(fname).Histo1D(("mass_"+proc, "mass_"+proc, 233, 70., 1002.), "ZZ_vec", "weight").GetValue()
+        Hist.Add(hist)
+    Hist.Scale(Lum)
+
+    return getZX(Hist, "fs_4l")
+
+def validation(info):
+    f2022 = ROOT.TFile.Open('H4l_MC2022_Test23Jan_SigOnly.root', "READ")
+    name = "ZZMass_4GeV_"
+
+    #-----------signal------------#
+    VBF125     = f2022.Get(name+"VBF125")
+    ggH125     = f2022.Get(name+"ggH125")
+    WplusH125  = f2022.Get(name+"WplusH125")
+    WminusH125 = f2022.Get(name+"WHminus125")
+    ZH125      = f2022.Get(name+"ZH125")
+    ttH125     = f2022.Get(name+"ttH125")
+    bbH125     = f2022.Get(name+"bbH125")
+
+    signalSamples = [ggH125, WplusH125, WminusH125, ZH125, ttH125, bbH125]
+    signal = VBF125.Clone("h_signal")
+    for i in signalSamples:
+        signal.Add(i, 1.)
+    signal.Scale(Lum)
+
+    zpx     = getZX(signal, "fs_4l")
+    zpx_rdf = get_zx_rdf(info)
+    zpx.Add(zpx_rdf, -1) # Subtract
+
+    zpx.SetTitle("Z+X: Original - RDataFrame")
+
+    Canvas = ROOT.TCanvas("Z+X: Original - RDataFrame", "Z+X: Original - RDataFrame", 900, 700)
+    zpx.DrawCopy()
+    Canvas.SaveAs("plots/{}/zpx_validation.png".format(datetime.date.today()))
+
+
 if __name__ == "__main__":
     import importlib.util
     from argparse import ArgumentParser
@@ -298,6 +358,8 @@ if __name__ == "__main__":
     spec.loader.exec_module(cfg_script)
 
     info = cfg_script.all_info
+
+    #validation(info)
 
     ZZ = ZZHists()
     ZZ.runZZ(**info)
