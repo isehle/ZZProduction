@@ -48,6 +48,8 @@ class ZZHists:
                         )
         
     def get_props(self, samplename, info):
+        """Return dictionary of histogram properties based off
+        of the histogram info and the samplename."""
         props = dict(
             nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
             xlow  = info["xlow"],
@@ -67,6 +69,9 @@ class ZZHists:
         return props
     
     def select_cand(self, info):
+        """Uses the info dictionary to return the correct column, index,
+        and which cand (i.e. ZZ, Z1, Z2...) from the property (i.e. "mass")
+        and region (i.e. "SR"), returning which directly."""
         prop, which, reg = info["prop"], info["which"], info["reg"]
         if reg == "SR":
             idx  = self._cand_maps[which][reg]["idx"]
@@ -77,24 +82,30 @@ class ZZHists:
         return col, idx, which
     
     def _fill_hist(self, fname, proc, info):
-            col, idx, which = self.select_cand(info)
-            props = self.get_props(proc, info)
+        """Fills and weighs 1D histograms of the
+        intereseted property (info["prop"]) for the
+        process whose path is given by fname."""
+        col, idx, which = self.select_cand(info)
+        props = self.get_props(proc, info)
 
-            Runs = ROOT.RDataFrame("Runs", fname)
-            df = ROOT.RDataFrame("Events", fname)
-            df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
+        Runs = ROOT.RDataFrame("Runs", fname)
+        df = ROOT.RDataFrame("Events", fname)
+        df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
-            filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx))
-            wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
+        filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx))
+        wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
 
-            hist = wgt.Define(which, "{}[{}]".format(col, idx)) # --> Need to broadcast which (a scalar float) to an RVec in order to multiply it by the RVec weight
-            hist = hist.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
-            
-            hist_weighted = hist.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
+        hist = wgt.Define(which, "{}[{}]".format(col, idx)) # --> Need to broadcast "which" (a scalar float) to an RVec in order to multiply it by the RVec weight
+        hist = hist.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
+        
+        hist_weighted = hist.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
 
-            return hist_weighted
+        return hist_weighted
 
     def fillHistos(self, **kwargs):
+        """Combines individual process histograms into
+        each category (ex. EW: WWZ+WZZ+ZZZ+...), and
+        scales them by the luminosity."""
         hists_weighted = {}
         for key, proc_dict in kwargs["proc_info"].items():
             if proc_dict["samples"] is None:
@@ -112,6 +123,9 @@ class ZZHists:
         return hists_weighted
     
     def runZZ(self, **kwargs):
+        """Calling function for the class,
+        acting as a wrapper for the primary class functions
+        and setting the hists property."""
         hists_weighted = self.fillHistos(**kwargs)
         hists_weighted.update({
             "Z+X": getZX(hists_weighted["H(125)"], "fs_4l")
@@ -127,6 +141,8 @@ class ZZHists:
         }
 
 class ZZPlotter:
+    """Plotting class for histograms created with the
+    ZZHists class."""
     def __init__(self, zz):
         self.zz = zz
 
@@ -164,6 +180,7 @@ class ZZPlotter:
         return xlabels
     
     def _get_hStacks(self, **kwargs):
+        """Create HStack from individual histograms."""
         hist_info = kwargs["hist_info"]
 
 
@@ -230,6 +247,9 @@ class ZZPlotter:
         return axes
     
     def _save_plot(self, Canvas, **kwargs):
+        """Set up plot directory (based on the date),
+        the plot title (based on the plot info) and saves
+        the plot."""
         unit = "GeV" if kwargs["prop"] not in ang_vars else ""
         
         axes = self._get_axes(Canvas, **kwargs)
@@ -245,6 +265,8 @@ class ZZPlotter:
         Canvas.SaveAs(os.path.join(direc, plot_path))
 
     def plot(self, **kwargs):
+        """Main plotting function, primarily acting
+        as a wrapper for the class's primary functions."""
 
         self._set_gStyle()
 
