@@ -22,13 +22,14 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 
 inFilenameMC2018     = "H4l_MC2018.root"
 inFilenameMC2022     = 'H4l_MC2022.root'
-inFilenameMC2022EE   = 'H4l_MC2022EE.root'
+inFilenameMC2022EE   = 'H4l_MC2022EE_TESTING.root'
 inFilenameData2022   = "H4l_Data_CD.root"
 inFilenameData2022EE = "H4l_Data_EFG.root"
-outFilename = "Plots_TESTING.root"
 
 ## output directory
 today = date.today()
+outFilename = "Plots_TESTING_{}.root".format(str(today))
+
 print('Creating output dir...')
 out_dir = str(today)+'_plots_mZZ'
 os.makedirs(out_dir, exist_ok=True) #check if output dir exist
