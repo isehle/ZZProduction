@@ -8,6 +8,7 @@ import datetime
 
 import math
 import ctypes
+import numpy as np
 import ROOT
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
@@ -51,7 +52,7 @@ class ZZHists:
         """Return dictionary of histogram properties based off
         of the histogram info and the samplename."""
         props = dict(
-            #nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
+            nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
             xlow  = info["xlow"],
             xhigh = info["xhigh"],
         )
@@ -88,38 +89,62 @@ class ZZHists:
         col, idx, which = self.select_cand(info)
         props = self.get_props(proc, info)
 
-        Runs = ROOT.RDataFrame("Runs", fname)
         df = ROOT.RDataFrame("Events", fname)
-        df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
+        if proc != "2022_CD" and proc != "2022_EFG": #data
+            Runs = ROOT.RDataFrame("Runs", fname)
+            df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
-        filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx))
-        wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
-
-        hist = wgt.Define(which, "{}[{}]".format(col, idx)) # --> Need to broadcast "which" (a scalar float) to an RVec in order to multiply it by the RVec weight
-        hist = hist.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
+        filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx)).Define(which, "{}[{}]".format(col, idx))
         
-        #hist_weighted = hist.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
-        hist_weighted = hist.Histo1D((props["name"], props["title"], 233, 70., 1002.), which+"_vec", "weight").GetValue()
+        if proc != "2022_CD" and proc != "2022_EFG": #data
+            wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
 
-        return hist_weighted
+            #Need to broadcast "which" (a scalar float) to an RVec in order to multiply it by the RVec weight
+            vec = wgt.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
+            
+            #hist = vec.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
+            hist = vec.Histo1D((props["name"], props["title"], 233, 70., 1002.), which+"_vec", "weight").GetValue()
+        else:
+            #hist = filt.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which).GetValue()
+            hist = filt.Histo1D((props["name"], props["title"], 233, 70., 1002.), which).GetValue()
+
+        return hist
 
     def fillHistos(self, **kwargs):
         """Combines individual process histograms into
         each category (ex. EW: WWZ+WZZ+ZZZ+...), and
         scales them by the luminosity."""
         hists_weighted = {}
-        for key, proc_dict in kwargs["proc_info"].items():
-            if proc_dict["samples"] is None:
-                continue
-            samples = list(proc_dict["samples"].items())
-            proc_0, fname_0 = samples[0][0], samples[0][1]
-            hist = self._fill_hist(fname_0, proc_0, kwargs["hist_info"])
-            Hist = hist.Clone()
-            for sample in samples[1:]:
-                proc, fname = sample[0], sample[1]
-                Hist.Add(self._fill_hist(fname, proc, kwargs["hist_info"]))
-            Hist.Scale(Lum)
-            hists_weighted[key] = Hist
+        for cat, cat_dict in kwargs["proc_info"].items():
+            era_hists = []
+            
+            for proc_dict in cat_dict["eras"].values():
+                if proc_dict["samples"] is None:
+                    continue
+                
+                try:
+                    samples = list(proc_dict["samples"].items())
+                except AttributeError:
+                    breakpoint()
+                proc_0, fname_0 = samples[0][0], samples[0][1]
+                hist = self._fill_hist(fname_0, proc_0, kwargs["hist_info"])
+                Hist = hist.Clone()
+                
+                for sample in samples[1:]:
+                    proc, fname = sample[0], sample[1]
+                    Hist.Add(self._fill_hist(fname, proc, kwargs["hist_info"]))
+                
+                if cat != "Data":
+                    Hist.Scale(proc_dict["lum"])
+                else:
+                    Hist.SetBinErrorOption(ROOT.TH1.kPoisson)
+                era_hists.append(Hist)
+            
+            if len(era_hists) > 0:
+                final_hist = era_hists[0]
+                for hi in era_hists[1:]:
+                    final_hist.Add(hi, 1.)
+                hists_weighted[cat] = final_hist
 
         return hists_weighted
     
@@ -128,17 +153,20 @@ class ZZHists:
         acting as a wrapper for the primary class functions
         and setting the hists property."""
         hists_weighted = self.fillHistos(**kwargs)
+        self.hists = hists_weighted
         hists_weighted.update({
             "Z+X": getZX(hists_weighted["H(125)"], "fs_4l")
         })
-        hists_weighted["Z+X"].Scale(Lum)
+        hists_weighted["Z+X"].Scale(kwargs["proc_info"]["Z+X"]["eras"]["2022"]["lum"])
 
         # Explicit ordering to best compare to Alessandra's plot
         self.hists = {
             "Z+X":  hists_weighted["Z+X"],
             "EW" :  hists_weighted["EW"],
+            "gg#rightarrow ZZ,Z#gamma*": hists_weighted["gg#rightarrow ZZ,Z#gamma*"],
             "q#bar{q}#rightarrow ZZ,Z#gamma*": hists_weighted["q#bar{q}#rightarrow ZZ,Z#gamma*"],
-            "H(125)": hists_weighted["H(125)"]
+            "H(125)": hists_weighted["H(125)"],
+            "Data": hists_weighted["Data"]
         }
 
 class ZZPlotter:
@@ -184,7 +212,6 @@ class ZZPlotter:
         """Create HStack from individual histograms."""
         hist_info = kwargs["hist_info"]
 
-
         HStack = ROOT.THStack("Stack_{}{}".format(hist_info["which"], hist_info["prop"]),
                           "; {} ; {}".format(hist_info["x_title"], hist_info["y_title"]))
 
@@ -192,27 +219,49 @@ class ZZPlotter:
             h.GetXaxis().SetTitle(hist_info["x_title"])
             h.GetYaxis().SetTitle(hist_info["y_title"])
 
-            line_color = kwargs["proc_info"][proc]["line_color"]
-            fill_color = kwargs["proc_info"][proc]["fill_color"]
-
-            h.SetLineColor(ROOT.TColor.GetColor(line_color))
-            h.SetFillColor(ROOT.TColor.GetColor(fill_color))
-
-            HStack.Add(h, "HISTO")
-
-        yhmax  = math.ceil(max(HStack.GetMaximum(), 0.))
-        #HStack.SetMinimum(1.0)
-        HStack.SetMaximum(yhmax)
-        HStack.Draw("histo")
-        HStack.GetXaxis().SetRangeUser(hist_info["xlow"], hist_info["xhigh"])
-        HStack.GetYaxis().SetRangeUser(0.0, yhmax)
+            if proc != "Data":
+                line_color = kwargs["proc_info"][proc]["line_color"]
+                fill_color = kwargs["proc_info"][proc]["fill_color"]
+                
+                h.SetLineColor(ROOT.TColor.GetColor(line_color))
+                h.SetFillColor(ROOT.TColor.GetColor(fill_color))
+                HStack.Add(h, "HISTO")
 
         return HStack
+    
+    def _get_data(self, **kwargs):
+        data_info = kwargs["proc_info"]["Data"]
+
+        hist_data = self.zz.hists["Data"]
+        
+        nbinsIn = hist_data.GetNbinsX()
+        nbins = 0
+        
+        x = np.array([0.]*nbinsIn, dtype='double')
+        y = np.array([0.]*nbinsIn, dtype='double')
+        errX = np.array([0.]*nbinsIn, dtype='double')  
+        UpErr = np.array([0.]*nbinsIn, dtype='double')
+        LowErr = np.array([0.]*nbinsIn, dtype='double')
+
+        for i in range (1, nbinsIn):
+            x[nbins]      = hist_data.GetBinCenter(i)
+            y[nbins]      = hist_data.GetBinContent(i)
+            UpErr[nbins]  = hist_data.GetBinErrorUp(i)
+            LowErr[nbins] = hist_data.GetBinErrorLow(i)
+            nbins += 1
+
+        Data = ROOT.TGraphAsymmErrors(nbins, x, y, errX, errX, LowErr, UpErr)
+        Data.SetMarkerStyle(data_info["marker_style"])
+        Data.SetLineColor(data_info["line_color"])
+        Data.SetMarkerSize(data_info["marker_size"])
+        
+        return Data
     
     def _get_legend(self, loc=(0.72, 0.70, 0.94, 0.92)):
         Legend = ROOT.TLegend(*loc)
         for proc, h in self.zz.hists.items():
-            Legend.AddEntry(h, proc, "f")
+            style = "f" if proc != "Data" else "p"
+            Legend.AddEntry(h, proc, style)
 
         Legend.SetFillColor(ROOT.kWhite)
         Legend.SetLineColor(ROOT.kWhite)
@@ -227,7 +276,8 @@ class ZZPlotter:
         in the configuration file and saved in kwargs."""
         CMS_lumi.writeExtraText       = True
         CMS_lumi.extraText            = "Preliminary"
-        CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(Lum*1e-3, 1))
+        #CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(Lum*1e-3, 1))
+        CMS_lumi.lumi_sqrtS           = "35.1 fb-1 (13.6 TeV)"
         CMS_lumi.cmsTextSize          = 1
         CMS_lumi.lumiTextSize         = 0.7
         CMS_lumi.extraOverCmsTextSize = 0.75
@@ -257,14 +307,18 @@ class ZZPlotter:
         axes = self._get_axes(Canvas, **kwargs)
         axes_labs = "per{}{}_{}to{}{}_{}".format(kwargs["step"], unit, kwargs["xlow"], kwargs["xhigh"], unit, axes)
 
-        direc = "plots/{}".format(datetime.date.today())
-        os.makedirs(direc, exist_ok=True)
+        date_direc = "plots/{}".format(datetime.date.today())
+        os.makedirs(date_direc, exist_ok=True)
 
-        plot_path = "{}_{}_ZpXtest_explicitHistRange_yAxis.png".format(kwargs["prop"],
-                                                     axes_labs,
-                                                    )
+        reg_direc = os.path.join(date_direc, kwargs["reg"])
+        os.makedirs(reg_direc, exist_ok=True)
 
-        Canvas.SaveAs(os.path.join(direc, plot_path))
+        plot_path = "{}_{}_full2022_ggZZ2018_withData_poissonErr_explicitBins.{}".format(kwargs["which"]+"_"+kwargs["prop"],
+                                      axes_labs,
+                                      kwargs["format"]
+                                    )
+
+        Canvas.SaveAs(os.path.join(reg_direc, plot_path))
 
     def plot(self, **kwargs):
         """Main plotting function, primarily acting
@@ -276,6 +330,15 @@ class ZZPlotter:
         Canvas.SetTicks()
 
         HStack = self._get_hStacks(**kwargs)
+        yhmax  = math.ceil(max(HStack.GetMaximum(), 0.)) + 15.
+
+        HStack.Draw("histo")
+        HStack.GetXaxis().SetRangeUser(kwargs["hist_info"]["xlow"], kwargs["hist_info"]["xhigh"])
+        HStack.GetYaxis().SetRangeUser(0.0, yhmax)
+
+        Data = self._get_data(**kwargs)
+        Data.Draw("samePE1")
+
         Legend = self._get_legend(kwargs["hist_info"]["legend_loc"])
 
         self._set_lumi(Canvas, **kwargs)
