@@ -95,7 +95,8 @@ class ZZHists:
             df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
         filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx)).Define(which, "{}[{}]".format(col, idx))
-        
+
+
         if proc != "2022_CD" and proc != "2022_EFG": #data
             wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
 
@@ -122,10 +123,8 @@ class ZZHists:
                 if proc_dict["samples"] is None:
                     continue
                 
-                try:
-                    samples = list(proc_dict["samples"].items())
-                except AttributeError:
-                    breakpoint()
+                samples = list(proc_dict["samples"].items())
+
                 proc_0, fname_0 = samples[0][0], samples[0][1]
                 hist = self._fill_hist(fname_0, proc_0, kwargs["hist_info"])
                 Hist = hist.Clone()
@@ -152,22 +151,14 @@ class ZZHists:
         """Calling function for the class,
         acting as a wrapper for the primary class functions
         and setting the hists property."""
-        hists_weighted = self.fillHistos(**kwargs)
-        self.hists = hists_weighted
-        hists_weighted.update({
-            "Z+X": getZX(hists_weighted["H(125)"], "fs_4l")
-        })
-        hists_weighted["Z+X"].Scale(kwargs["proc_info"]["Z+X"]["eras"]["2022"]["lum"])
+        hists = self.fillHistos(**kwargs)
+        if "Z+X" in kwargs["proc_info"]:
+            hists.update({
+                "Z+X": getZX(hists["H(125)"], "fs_4l")
+            })
+            hists["Z+X"].Scale(kwargs["proc_info"]["Z+X"]["eras"]["2022_EE"]["lum"])
 
-        # Explicit ordering to best compare to Alessandra's plot
-        self.hists = {
-            "Z+X":  hists_weighted["Z+X"],
-            "EW" :  hists_weighted["EW"],
-            "gg#rightarrow ZZ,Z#gamma*": hists_weighted["gg#rightarrow ZZ,Z#gamma*"],
-            "q#bar{q}#rightarrow ZZ,Z#gamma*": hists_weighted["q#bar{q}#rightarrow ZZ,Z#gamma*"],
-            "H(125)": hists_weighted["H(125)"],
-            "Data": hists_weighted["Data"]
-        }
+        self.hists = dict(sorted(hists.items(), key = lambda item: item[1].Integral()))
 
 class ZZPlotter:
     """Plotting class for histograms created with the
@@ -277,7 +268,7 @@ class ZZPlotter:
         CMS_lumi.writeExtraText       = True
         CMS_lumi.extraText            = "Preliminary"
         #CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(Lum*1e-3, 1))
-        CMS_lumi.lumi_sqrtS           = "35.1 fb-1 (13.6 TeV)"
+        CMS_lumi.lumi_sqrtS           = "27.01 fb-1 (13.6 TeV)"
         CMS_lumi.cmsTextSize          = 1
         CMS_lumi.lumiTextSize         = 0.7
         CMS_lumi.extraOverCmsTextSize = 0.75
@@ -313,7 +304,7 @@ class ZZPlotter:
         reg_direc = os.path.join(date_direc, kwargs["reg"])
         os.makedirs(reg_direc, exist_ok=True)
 
-        plot_path = "{}_{}_full2022_ggZZ2018_withData_poissonErr_explicitBins.{}".format(kwargs["which"]+"_"+kwargs["prop"],
+        plot_path = "{}_{}_my_2022EE_samples_sorted.{}".format(kwargs["which"]+"_"+kwargs["prop"],
                                       axes_labs,
                                       kwargs["format"]
                                     )
@@ -335,9 +326,9 @@ class ZZPlotter:
         HStack.Draw("histo")
         HStack.GetXaxis().SetRangeUser(kwargs["hist_info"]["xlow"], kwargs["hist_info"]["xhigh"])
         HStack.GetYaxis().SetRangeUser(0.0, yhmax)
-
-        Data = self._get_data(**kwargs)
-        Data.Draw("samePE1")
+        if "Data" in kwargs["proc_info"]:
+            Data = self._get_data(**kwargs)
+            Data.Draw("samePE1")
 
         Legend = self._get_legend(kwargs["hist_info"]["legend_loc"])
 

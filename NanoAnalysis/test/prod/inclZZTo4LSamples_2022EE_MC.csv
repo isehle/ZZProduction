@@ -1,0 +1,55 @@
+identifier,process,crossSection=-1,BR=1,execute=True,dataset,prefix,pattern,splitLevel,::variables,::pyFragments,comment
+### xsec in pb
+###,,,,,,,,,,,xsec for H125 samples is taken from this ad interim prescription: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWG136TeVxsec_extrap
+###,,,,,,,,,,,for the other mass points the xsec is scaled from 13 TeV to 13.6 TeV following this prescription: xsec_13p6 = xsec_13 * 0.4 + xsec_14 * 0.6 https://indico.cern.ch/event/1169286/contributions/5126668/attachments/2557560/4416316/HXSWG.pdf#page=5
+###,,,,,,,,,,,MC situation evolving here https://docs.google.com/spreadsheets/d/1StPLK3iVXZMx694qgEkl8QrZutFszvqT6ecN-MFZZKY/edit#gid=0
+###,,,,,,,,,,,signal BR values taken from YR4 https://twiki.cern.ch/twiki/bin/view/LHCPhysics/CERNYellowReportPageBR
+###,,,,,,,,,,,for ZH and ttH the BR is obtained as BR(H->ZZ->2L2X) = BR(H->4L) + BR(H->2L2q) + BR(H->ZZ*->2L2nu) * BR(H->2L2nu) / [ BR(H->ZZ*->2L2nu) + BR(H->WW*->2L2nu) ] where BR(H->4L) BR(H->2L2q) and BR(H->2L2nu) are taken from the YR4 twiki
+###,,,,,,,,,,,for ZH the BR column will include also the gen filter efficiency (under computation)
+
+###,,,,,,,,,,,These samples correspond to the E-F-G data taking periods - after the ECAL leak (called Run3EE)
+
+###,,,,,,,,,,,qq->ZZ signal - xsec taken from powheg gridpack, BR = (n_lep)^2*BR(Z-->2l)^2 w/ n_lep = 3 and BR(Z-->2l) from the PDG https://pdg.lbl.gov/2023/tables/contents_tables.html
+ZZTo4l,,1.39,,,/ZZto4L_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv11-126X_mcRun3_2022_realistic_postEE_v1-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,3,GENXSEC=1.39;GENBR=1;PROCESS_CR=True;APPLY_K_NNLOQCD_ZZQQB=True;APPLY_K_NLOEW_ZZQQB=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+
+###,,,,,,,,,,,gg->ZZ signal - Xsec using https://twiki.cern.ch/twiki/bin/viewauth/CMS/HowToGenXSecAnalyzer
+#ggTo4e
+#ggTo4mu
+#ggTo4tau
+ggTo2e2mu_Contin_MCFM701,,6.115,,,/GluGluToContinto2Zto2E2Mu_TuneCP5_13p6TeV_mcfm701-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM, dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+ggTo2e2tau_Contin_MCFM701,,6.115,,,/GluGluToContinto2Zto2E2Tau_TuneCP5_13p6TeV_mcfm701-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM, dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+ggTo2mu2tau_Contin_MCFM701,,6.115,,,/GluGluToContinto2Zto2Mu2Tau_TuneCP5_13p6TeV_mcfm701-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM, dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+
+###,,,,,,,,,,,DY
+DYJetsToLL,,5558.0,,,/DYJetsToLL_M-50_TuneCP5_13p6TeV-madgraphMLM-pythia8/Run3Summer22EENanoAODv12-forPOG_130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py,xsec from XSDB 
+
+###,,,,,,,,,,,TT
+##TTJets
+TTto2L2Nu_TuneCP5_13p6TeV_powheg,,762.1,,,/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6_ext1-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py, xsec from XSDB (https://xsdb-temp.app.cern.ch/?searchQuery=DAS=TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8)
+
+###,,,,,,,,,,,TTZ
+
+###,,,,,,,,,,,WZto3LNu
+#WZto3LNu,,XSEC,,,/WZto3LNu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=XSEC.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+WZto3LNu,,4.924,,,/WZto3LNu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=51.;GENBR=0.003944352;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py, xsec at 13 TeV BR = BR(W-->lnu)*BR(Z-->ll) https://pdg.lbl.gov/2023/tables/contents_tables.html
+
+###,,,,,,,,,,,H
+ggH125,,52.23,0.0002745,,/GluGluHtoZZto4L_M-125_TuneCP5_13p6TeV_powheg2-JHUGenV752-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM  ,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=1.;GENBR=1.;ADDLHEKINEMATICS=True;VVMODE=1;VVDECAYMODE=0;APPLY_QCD_GGF_UNCERT=True;LEPTON_SETUP=2022,RecoProbabilities.py,
+
+
+# WE SHOULD ACTUALLY BE USING VVZJets SAMPLES AS THE TRIBOSON BACKGROUND
+###,,,,,,,,,,,WWZ
+#WWZJets
+WWZ,,0.3,,,/WWZ_4F_TuneCP5_13p6TeV_amcatnlo-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=0.3.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py, xsec at 13 TeV
+
+###,,,,,,,,,,,WZZ
+#WZZJets
+WZZ,,0.2,,,/WZZ_TuneCP5_13p6TeV_amcatnlo-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=0.2.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py, xsec at 13 TeV
+
+###,,,,,,,,,,,ZZZ
+#ZZZJets
+#ZZGJets
+ZZZ,,0.15,,,//ZZZ_TuneCP5_13p6TeV_amcatnlo-pythia8/Run3Summer22EENanoAODv12-130X_mcRun3_2022_realistic_postEE_v6-v2/NANOAODSIM,dbs,root://cms-xrd-global.cern.ch/,2,GENXSEC=0.15.;GENBR=1.;PROCESS_CR=True;ADDZTREE=True;LEPTON_SETUP=2022,RecoProbabilities.py, xsec at 13 TeV ACTUALLY < 0.2 JUST CHOSE 0.15
+
+###,,,,,,,,,,,ZZpJets
+#ZZJJ
