@@ -11,6 +11,7 @@ from ZZAnalysis.NanoAnalysis.tools import setConf, getConf, insertAfter
 #SampleToRun = "MCsync_UL"
 #SampleToRun = "Data2022"
 SampleToRun = "MC2022"
+SampleToRun = "ZZTo4L_2022EE"
 
 ### Customize processing variables
 #setConf("runMELA", False)
@@ -99,7 +100,16 @@ elif SampleToRun == "MC2022" :
         ])
 #    json = {"1": [[1245, 1245],[1306, 1306],[1410, 1410],[1692, 1692],[1903, 1903],[1910, 1910],[1915, 1915],[1927, 1927],[1939, 1939],[1940, 1940],[1944, 1944],[1945, 1945],[1956, 1956],[1960, 1960],[1965, 1965],[1967, 1967],[1968, 1968],[1969, 1969],[2104, 2104]]}
 
-
+elif SampleToRun == "ZZTo4L_2022EE":
+    setConf("SAMPLENAME", "ZZTo4L")
+    setConf("XSEC", 1.39)
+    setConf("LEPTON_SETUP", 2022)
+    setConf("NANOVERSION", 11)
+    setConf("IsMC", True)
+    setConf("store", "root://cms-xrd-global.cern.ch/")
+    setConf("fileNames", [
+        "/store/mc/Run3Summer22EENanoAODv11/ZZto4L_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/126X_mcRun3_2022_realistic_postEE_v1-v2/2810000/06da713c-4abc-4b80-a50b-d38bc3974588.root"
+    ])
 
 #####################################################################
 ### This import should be done AFTER all customizations (setConf calls)
