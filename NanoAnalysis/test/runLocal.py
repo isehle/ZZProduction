@@ -10,7 +10,7 @@ from ZZAnalysis.NanoAnalysis.tools import setConf, getConf, insertAfter
 #SampleToRun = "MCsync_Rereco"
 #SampleToRun = "MCsync_UL"
 #SampleToRun = "Data2022"
-SampleToRun = "MC2022"
+#SampleToRun = "MC2022"
 SampleToRun = "ZZTo4L_2022EE"
 
 ### Customize processing variables
