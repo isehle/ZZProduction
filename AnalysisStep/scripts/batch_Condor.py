@@ -148,6 +148,16 @@ echo -n $exitStatus > exitStatus.txt
 echo 'job done at: ' $(date) with exit status: ${{exitStatus+0}}
 gzip log.txt
 
+if [ -n "$TRANSFER_DIR" ] ; then
+    p1=`dirname $SUBMIT_DIR`
+    p2=`basename $p1`
+    eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
+    echo "Transferring output to: "$eosOutputPath
+    mkdir -p $eosOutputPath
+    cp *.txt *.gz ${{eosOutputPath}}/
+    echo "...done"
+fi
+
 export ROOT_HIST=0
 if [ -s ZZ4lAnalysis.root ]; then
  root -q -b '${{CMSSW_BASE}}/src/ZZAnalysis/AnalysisStep/test/prod/rootFileIntegrity.r("ZZ4lAnalysis.root")'
@@ -174,11 +184,11 @@ echo '...done at' $(date)
 # As copying back of files is handled automatically by condor, it must be overridden in condor.sub
 # NOTE: using the FUSE interface since eos commands do not appear to work reliably on batch (issues with permissions etc)
 if [ -n "$TRANSFER_DIR" ] ; then
-    p1=`dirname $SUBMIT_DIR`
-    p2=`basename $p1`
-    eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
+    #p1=`dirname $SUBMIT_DIR`
+    #p2=`basename $p1`
+    #eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
     echo "Transferring output to: "$eosOutputPath
-    mkdir -p $eosOutputPath
+    #mkdir -p $eosOutputPath
     cp ZZ4lAnalysis.root* *.txt *.gz ${{eosOutputPath}}/
     echo "...done"
 fi
