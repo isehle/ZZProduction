@@ -7,8 +7,11 @@ lumi_2022 = 35.08424e3 # 1/pb 2022 C-G  (= 35.181930231/fb of full 355100_362760
 lumi_CD   = 8.077e3 # 1/pb
 lumi_EFG  = 27.007e3 # 1/pb
 
-path_MC = "/eos/user/i/iehle/Analysis/secondSamples/PROD_inclZZTo4LSamples_2022EE_MC_176cc0be"
-path_VVV = "/eos/user/i/iehle/Analysis/firstSamples/PROD_inclZZTo4LSamples_2022EE_MC_68597165d9e/"
+#path_MC = "/eos/user/i/iehle/Analysis/secondSamples/PROD_inclZZTo4LSamples_2022EE_MC_176cc0be"
+#path_VVV = "/eos/user/i/iehle/Analysis/firstSamples/PROD_inclZZTo4LSamples_2022EE_MC_68597165d9e/"
+
+path_MC = "/eos/user/i/iehle/Analysis/fifth_samples/PROD_inclZZTo4LSamples_2022EE_MC_twoFilesPerChunk_9aa3db47/"
+
 ang_vars = ["eta", "cos", "phi"]
 
 sample_info = {
@@ -19,6 +22,16 @@ sample_info = {
             "2022_EE": dict(
                 samples = sample_paths(path_MC, ["ZZTo4l"]),
                 lum     = lumi_EFG
+            )
+        }
+    ),
+    "gg#rightarrow ZZ,Z#gamma*": dict(
+        fill_color = "",
+        line_color = "",
+        eras       = {
+            "2022_EE": dict(
+                samples = sample_paths(path_MC, ['ggTo2e2mu_Contin_MCFM701', 'ggTo2e2tau_Contin_MCFM701', 'ggTo2mu2tau_Contin_MCFM701']),
+                lumi    = lumi_EFG
             )
         }
     ),
@@ -57,7 +70,7 @@ sample_info = {
         line_color = "#ffbf00",
         eras       = {
             "2022_EE": dict(
-                samples = sample_paths(path_VVV, ["WWZ", "WZZ", "ZZZ"]),
+                samples = sample_paths(path_MC, ["WWZ", "WZZ", "ZZZ"]),
                 lum     = lumi_EFG
             )
         }
