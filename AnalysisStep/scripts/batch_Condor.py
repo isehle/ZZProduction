@@ -148,22 +148,17 @@ echo -n $exitStatus > exitStatus.txt
 echo 'job done at: ' $(date) with exit status: ${{exitStatus+0}}
 gzip log.txt
 
-if [ -n "$TRANSFER_DIR" ] ; then
-    p1=`dirname $SUBMIT_DIR`
-    p2=`basename $p1`
-    eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
-    echo "Transferring output to: "$eosOutputPath
-    mkdir -p $eosOutputPath
-    cp *.txt *.gz ${{eosOutputPath}}/
-    echo "...done"
-fi
-
 export ROOT_HIST=0
 if [ -s ZZ4lAnalysis.root ]; then
- root -q -b '${{CMSSW_BASE}}/src/ZZAnalysis/AnalysisStep/test/prod/rootFileIntegrity.r("ZZ4lAnalysis.root")'
+    root -q -b '${{CMSSW_BASE}}/src/ZZAnalysis/AnalysisStep/test/prod/rootFileIntegrity.r("ZZ4lAnalysis.root")'
 else
- echo moving empty file
- mv ZZ4lAnalysis.root ZZ4lAnalysis.root.empty
+    if [ -f ZZ4lAnalysis.root ]; then
+        echo moving empty file
+        mv ZZ4lAnalysis.root ZZ4lAnalysis.root.empty
+    else
+        echo "ZZ4lAnalysis.root does not exist. Writing fake empty file."
+        touch ZZ4lAnalysis.root.empty
+    fi
 fi
 
 echo "Files on node:"
@@ -173,7 +168,9 @@ ls -la
 rm -f br.sm1 br.sm2 ffwarn.dat input.DAT process.DAT "$USER.cc"
 
 #delete intermediate _Skim.root files
-rm -f *_Skim.root
+if [ -f ZZ4lAnalysis.root ]; then
+    rm -f *_Skim.root
+fi
 
 #delete submission scripts, so that they are not copied back (which fails sometimes)
 rm -f run_cfg.py batchScript.sh
@@ -184,11 +181,11 @@ echo '...done at' $(date)
 # As copying back of files is handled automatically by condor, it must be overridden in condor.sub
 # NOTE: using the FUSE interface since eos commands do not appear to work reliably on batch (issues with permissions etc)
 if [ -n "$TRANSFER_DIR" ] ; then
-    #p1=`dirname $SUBMIT_DIR`
-    #p2=`basename $p1`
-    #eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
+    p1=`dirname $SUBMIT_DIR`
+    p2=`basename $p1`
+    eosOutputPath=$TRANSFER_DIR/$p2/`basename $SUBMIT_DIR`
     echo "Transferring output to: "$eosOutputPath
-    #mkdir -p $eosOutputPath
+    mkdir -p $eosOutputPath
     cp ZZ4lAnalysis.root* *.txt *.gz ${{eosOutputPath}}/
     echo "...done"
 fi
@@ -583,4 +580,3 @@ if __name__ == '__main__':
     waitingTime = 0.05
 #FIXME to be implemented; should check batchManager.options_.negate; can simply call resubmit.csh
 #batchManager.SubmitJobs( waitingTime )
-
