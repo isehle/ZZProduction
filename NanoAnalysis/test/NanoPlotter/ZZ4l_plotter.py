@@ -29,85 +29,72 @@ class ZZHists:
         self.hists = None
         self.props = None
         self.ZmassValue = 91.1876
-        self._cand_maps = dict(
-                            ZZ = dict(
-                                SR = dict(
-                                    idx = "bestCandIdx",
-                                    col = lambda prop: "ZZCand_{}".format(prop)
-                                ),
-                                CR = dict(
-                                    idx = lambda reg: "ZLLbest{}Idx".format(reg),
-                                    col = lambda prop: "ZLLCand_{}".format(prop)
-                                )
-                            ),
-                            Z1 = dict(
-                                SR = dict(
-                                    idx = "bestZIdx",
-                                    col = lambda prop: "ZCand_{}".format(prop)
-                                )
-                            )
-                        )
-        
-    def get_props(self, samplename, info):
-        """Return dictionary of histogram properties based off
-        of the histogram info and the samplename."""
-        props = dict(
-            nbins = int((info["xhigh"] - info["xlow"])/info["step"]),
-            xlow  = info["xlow"],
-            xhigh = info["xhigh"],
-        )
-        if samplename is not None:
-            unit = "GeV" if info["prop"] not in ang_vars else ""
-            if info["prop"] == "cos":
-                name = "cosTheta_{}".format(1*(info["which"]=="Z1") + 3*(info["which"]=="Z2"))
-                name += "_per{}_{}".format(info["step"], samplename)
+
+        self.new_col    = None
+
+        self._idx       = lambda reg: "bestCandIdx" if reg == "SR" else "ZLLbest{}Idx".format(reg)
+        self._filt_df   = lambda df, reg: df.Filter("{}!=-1 && HLT_passZZ4l".format(self._idx(reg)))
+
+        self._sig_col   = lambda which, prop: "ZZCand_{}{}".format("" if which=="ZZ" else which, prop)
+        self._cr_col    = lambda which, prop: "ZLLCand_{}{}".format("" if which=="ZZ" else which, prop)
+        self._sel_col   = lambda which, prop, reg: self._sig_col(which, prop) if reg=="SR" else self._cr_col(which, prop)
+    
+    def _defCand(self, df, hist_info, prop=None):
+        reg_filt = self._filt_df(df, hist_info["reg"]) if self.new_col is None else df
+
+        true_prop = hist_info["prop"] if prop is None else prop
+        sel_col = self._sel_col(hist_info["which"], true_prop, hist_info["reg"])
+        self.new_col = "{}_{}".format(hist_info["which"], true_prop)
+
+        return reg_filt.Define(self.new_col, "{}[{}]".format(sel_col, self._idx(hist_info["reg"])))
+    
+    def _defCosTheta(self, df, hist_info):
+        eta_cand = self.new_col
+        self.new_col = "{}_cos".format(hist_info["which"])
+        return df.Define(self.new_col, "cos(2*atan(exp(-{})))".format(eta_cand))        
+
+    def _getHist(self, filt, hist_info, proc):
+        name = hist_info["which"] + "_" + proc
+        title = hist_info["which"] + "_" + proc
+        xhigh, xlow = hist_info["xhigh"], hist_info["xlow"]
+        nbins = int((xhigh - xlow)/hist_info["step"])
+
+        if proc != "Data":
+            if hist_info["reg"] == "SR":
+                wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
+                vec = wgt.Define(self.new_col+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(self.new_col))
+                hist = vec.Histo1D((name, title, nbins, xlow, xhigh), self.new_col+"_vec", "weight").GetValue()
             else:
-                name = "{}{}_per{}{}_".format(info["which"], info["prop"], info["step"], unit)+samplename
-            props.update(dict(
-                            name  = name,
-                            title = name,
-            ))
-        return props
-    
-    def select_cand(self, info):
-        """Uses the info dictionary to return the correct column, index,
-        and which cand (i.e. ZZ, Z1, Z2...) from the property (i.e. "mass")
-        and region (i.e. "SR"), returning which directly."""
-        prop, which, reg = info["prop"], info["which"], info["reg"]
-        if reg == "SR":
-            idx  = self._cand_maps[which][reg]["idx"]
-            col  = self._cand_maps[which][reg]["col"](prop)
+                wgt = filt.Define("weight", "overallEventWeight/genEventSumw")
+                hist = wgt.Histo1D((name, title, nbins, xlow, xhigh), self.new_col, "weight").GetValue()
         else:
-            idx = self._cand_maps[which]["CR"]["idx"](reg)
-            col = self._cand_maps[which]["CR"]["col"](prop)
-        return col, idx, which
-    
-    def _fill_hist(self, fname, proc, info):
+            hist = filt.Histo1D((name, title, nbins, xlow, xhigh), self.new_col).GetValue()
+            hist.SetBinErrorOption(ROOT.TH1.kPoisson)
+
+        return hist
+
+    def _fill_hist(self, proc_info, hist_info):
         """Fills and weighs 1D histograms of the
         intereseted property (info["prop"]) for the
         process whose path is given by fname."""
-        col, idx, which = self.select_cand(info)
-        props = self.get_props(proc, info)
 
-        df = ROOT.RDataFrame("Events", fname)
-        if proc != "2022_CD" and proc != "2022_EFG": #data
-            Runs = ROOT.RDataFrame("Runs", fname)
+        proc = list(proc_info["samples"].keys())[0]
+        samples = proc_info["samples"].values()
+
+        df = ROOT.RDataFrame("Events", samples)
+
+        if proc != "Data":
+            Runs = ROOT.RDataFrame("Runs", samples)
             df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
-        filt = df.Filter("({}!=-1) && HLT_passZZ4l".format(idx)).Define(which, "{}[{}]".format(col, idx))
-
-
-        if proc != "2022_CD" and proc != "2022_EFG": #data
-            wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
-
-            #Need to broadcast "which" (a scalar float) to an RVec in order to multiply it by the RVec weight
-            vec = wgt.Define(which+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(which))
-            
-            #hist = vec.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which+"_vec", "weight").GetValue()
-            hist = vec.Histo1D((props["name"], props["title"], 233, 70., 1002.), which+"_vec", "weight").GetValue()
+        if hist_info["prop"] == "cos":
+            eta_df = self._defCand(df, hist_info, prop="eta") # theta is defined by the eta of selected cands
+            filt   = self._defCosTheta(eta_df, hist_info)
         else:
-            #hist = filt.Histo1D((props["name"], props["title"], props["nbins"], props["xlow"], props["xhigh"]), which).GetValue()
-            hist = filt.Histo1D((props["name"], props["title"], 233, 70., 1002.), which).GetValue()
+            filt = self._defCand(df, hist_info)
+
+        hist = self._getHist(filt, hist_info, proc)
+        if proc != "Data": hist.Scale(proc_info["lum"])
 
         return hist
 
@@ -117,33 +104,11 @@ class ZZHists:
         scales them by the luminosity."""
         hists_weighted = {}
         for cat, cat_dict in kwargs["proc_info"].items():
-            era_hists = []
-            
             for proc_dict in cat_dict["eras"].values():
                 if proc_dict["samples"] is None:
                     continue
-                
-                samples = list(proc_dict["samples"].items())
 
-                proc_0, fname_0 = samples[0][0], samples[0][1]
-                hist = self._fill_hist(fname_0, proc_0, kwargs["hist_info"])
-                Hist = hist.Clone()
-                
-                for sample in samples[1:]:
-                    proc, fname = sample[0], sample[1]
-                    Hist.Add(self._fill_hist(fname, proc, kwargs["hist_info"]))
-                
-                if cat != "Data":
-                    Hist.Scale(proc_dict["lum"])
-                else:
-                    Hist.SetBinErrorOption(ROOT.TH1.kPoisson)
-                era_hists.append(Hist)
-            
-            if len(era_hists) > 0:
-                final_hist = era_hists[0]
-                for hi in era_hists[1:]:
-                    final_hist.Add(hi, 1.)
-                hists_weighted[cat] = final_hist
+                hists_weighted[cat] = self._fill_hist(proc_dict, kwargs["hist_info"])
 
         return hists_weighted
     
@@ -202,13 +167,14 @@ class ZZPlotter:
     def _get_hStacks(self, **kwargs):
         """Create HStack from individual histograms."""
         hist_info = kwargs["hist_info"]
+        plot_info = kwargs["plot_info"]
 
         HStack = ROOT.THStack("Stack_{}{}".format(hist_info["which"], hist_info["prop"]),
-                          "; {} ; {}".format(hist_info["x_title"], hist_info["y_title"]))
+                          "; {} ; {}".format(plot_info["x_title"], plot_info["y_title"]))
 
         for proc, h in self.zz.hists.items():
-            h.GetXaxis().SetTitle(hist_info["x_title"])
-            h.GetYaxis().SetTitle(hist_info["y_title"])
+            h.GetXaxis().SetTitle(plot_info["x_title"])
+            h.GetYaxis().SetTitle(plot_info["y_title"])
 
             if proc != "Data":
                 line_color = kwargs["proc_info"][proc]["line_color"]
@@ -267,47 +233,29 @@ class ZZPlotter:
         in the configuration file and saved in kwargs."""
         CMS_lumi.writeExtraText       = True
         CMS_lumi.extraText            = "Preliminary"
-        #CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(Lum*1e-3, 1))
-        CMS_lumi.lumi_sqrtS           = "27.01 fb-1 (13.6 TeV)"
+        CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(kwargs["lumin"], 3)*1e-3)
         CMS_lumi.cmsTextSize          = 1
         CMS_lumi.lumiTextSize         = 0.7
         CMS_lumi.extraOverCmsTextSize = 0.75
         CMS_lumi.relPosX              = 0.12
         CMS_lumi.CMS_lumi(Canvas, 0, 0)
         Canvas.Update()
-
-
-    def _get_axes(self, Canvas, **kwargs):
-        x_ax, y_ax = "linX", "linY"
-        if kwargs["logx"]:
-            Canvas.SetLogx()
-            x_ax = "logX"
-        if kwargs["logy"]:
-            Canvas.SetLogy()
-            y_ax = "logY"
-        axes = "{}{}".format(x_ax, y_ax)
-
-        return axes
     
-    def _save_plot(self, Canvas, **kwargs):
+    def _save_plot(self, Canvas, reg, **kwargs):
         """Set up plot directory (based on the date),
         the plot title (based on the plot info) and saves
         the plot."""
-        unit = "GeV" if kwargs["prop"] not in ang_vars else ""
-        
-        axes = self._get_axes(Canvas, **kwargs)
-        axes_labs = "per{}{}_{}to{}{}_{}".format(kwargs["step"], unit, kwargs["xlow"], kwargs["xhigh"], unit, axes)
 
         date_direc = "plots/{}".format(datetime.date.today())
         os.makedirs(date_direc, exist_ok=True)
 
-        reg_direc = os.path.join(date_direc, kwargs["reg"])
+        reg_direc = os.path.join(date_direc, reg)
         os.makedirs(reg_direc, exist_ok=True)
 
-        plot_path = "{}_{}_my_2022EE_samples_sorted.{}".format(kwargs["which"]+"_"+kwargs["prop"],
-                                      axes_labs,
-                                      kwargs["format"]
-                                    )
+        plot_path = "{}_{}_{}.{}".format(kwargs["out_file"],
+                                      "logX" if kwargs["logx"] else "linX",
+                                      "logY" if kwargs["logy"] else "linY",
+                                      kwargs["format"])
 
         Canvas.SaveAs(os.path.join(reg_direc, plot_path))
 
@@ -324,81 +272,36 @@ class ZZPlotter:
         yhmax  = math.ceil(max(HStack.GetMaximum(), 0.)) + 15.
 
         HStack.Draw("histo")
-        HStack.GetXaxis().SetRangeUser(kwargs["hist_info"]["xlow"], kwargs["hist_info"]["xhigh"])
-        HStack.GetYaxis().SetRangeUser(0.0, yhmax)
+        HStack.GetXaxis().SetRangeUser(*kwargs["plot_info"]["x_range"])
+
+        if kwargs["plot_info"]["logy"] and kwargs["plot_info"]["y_min"]==0:
+            yhmin = 1e-3
+        else:
+            yhmin = kwargs["plot_info"]["y_min"]
+
+        HStack.SetMinimum(yhmin)
+        HStack.SetMaximum(yhmax)
+
         if "Data" in kwargs["proc_info"]:
             Data = self._get_data(**kwargs)
             Data.Draw("samePE1")
 
-        Legend = self._get_legend(kwargs["hist_info"]["legend_loc"])
+        Legend = self._get_legend(kwargs["plot_info"]["legend_loc"])
 
         self._set_lumi(Canvas, **kwargs)
 
-        if kwargs["hist_info"]["xlabels"] is not None:
-            xlabels = self._get_xlabels(kwargs["hist_info"]["xlabels"])
+        if kwargs["plot_info"]["xlabels"] is not None:
+            xlabels = self._get_xlabels(kwargs["plot_info"]["xlabels"])
             for label in xlabels:
                 label.Draw()
             ROOT.gPad.RedrawAxis()
 
-        self._save_plot(Canvas, **kwargs["hist_info"])
+        if kwargs["plot_info"]["logx"]:
+            Canvas.SetLogx()
+        if kwargs["plot_info"]["logy"]:
+            Canvas.SetLogy()
 
-def get_rdfs(fname):
-    Runs = ROOT.RDataFrame("Runs", fname)
-    df = ROOT.RDataFrame("Events", fname)
-    df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
-
-    filt = df.Filter("(bestCandIdx!=-1)&&(HLT_passZZ4l)")
-    wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
-
-    rdf = wgt.Define("ZZ", "ZZCand_mass[bestCandIdx]")
-    rdf = rdf.Define("ZZ_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), ZZ);") 
-
-    return rdf
-
-def get_zx_rdf(info):
-    sample_dict = info["proc_info"]["H(125)"]["samples"]
-    samples = list(sample_dict.items())
-    proc_0, fname_0 = samples[0][0], samples[0][1]
-
-    hist = get_rdfs(fname_0).Histo1D(("mass_"+proc_0, "mass_"+proc_0, 233, 70., 1002.), "ZZ_vec", "weight").GetValue()
-    Hist = hist.Clone()
-    for sample in samples[1:]:
-        proc, fname = sample
-        hist = get_rdfs(fname).Histo1D(("mass_"+proc, "mass_"+proc, 233, 70., 1002.), "ZZ_vec", "weight").GetValue()
-        Hist.Add(hist)
-    Hist.Scale(Lum)
-
-    return getZX(Hist, "fs_4l")
-
-def validation(info):
-    f2022 = ROOT.TFile.Open('H4l_MC2022_Test23Jan_SigOnly.root', "READ")
-    name = "ZZMass_4GeV_"
-
-    #-----------signal------------#
-    VBF125     = f2022.Get(name+"VBF125")
-    ggH125     = f2022.Get(name+"ggH125")
-    WplusH125  = f2022.Get(name+"WplusH125")
-    WminusH125 = f2022.Get(name+"WHminus125")
-    ZH125      = f2022.Get(name+"ZH125")
-    ttH125     = f2022.Get(name+"ttH125")
-    bbH125     = f2022.Get(name+"bbH125")
-
-    signalSamples = [ggH125, WplusH125, WminusH125, ZH125, ttH125, bbH125]
-    signal = VBF125.Clone("h_signal")
-    for i in signalSamples:
-        signal.Add(i, 1.)
-    signal.Scale(Lum)
-
-    zpx     = getZX(signal, "fs_4l")
-    zpx_rdf = get_zx_rdf(info)
-    zpx.Add(zpx_rdf, -1) # Subtract
-
-    zpx.SetTitle("Z+X: Original - RDataFrame")
-
-    Canvas = ROOT.TCanvas("Z+X: Original - RDataFrame", "Z+X: Original - RDataFrame", 900, 700)
-    zpx.DrawCopy()
-    Canvas.SaveAs("plots/{}/zpx_validation.png".format(datetime.date.today()))
-
+        self._save_plot(Canvas, kwargs["hist_info"]["reg"], **kwargs["plot_info"])
 
 if __name__ == "__main__":
     import importlib.util
@@ -412,8 +315,6 @@ if __name__ == "__main__":
     spec.loader.exec_module(cfg_script)
 
     info = cfg_script.all_info
-
-    #validation(info)
 
     ZZ = ZZHists()
     ZZ.runZZ(**info)
