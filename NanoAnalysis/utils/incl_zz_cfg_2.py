@@ -9,10 +9,12 @@ lumi_EFG  = 27.007e3 # 1/pb
 
 path_data_2022EFG = "/eos/cms/store/group/phys_higgs/cmshzz4l/cjlst/RunIII/231209_nano/Data2022_EFG/"
 
-path_MC = "/eos/user/i/iehle/Analysis/fifth_samples/PROD_inclZZTo4LSamples_2022EE_MC_twoFilesPerChunk_9aa3db47/"
+#path_MC = "/eos/user/i/iehle/Analysis/fifth_samples/PROD_inclZZTo4LSamples_2022EE_MC_twoFilesPerChunk_9aa3db47/"
+path_MC = "/eos/user/i/iehle/Analysis/inclZZ_MC_2022EE_allBranches_ZZNanoV12/"
 
 ang_vars = ["eta", "cos", "phi"]
 
+# "To first order L should always include taus but you should check." -- Andrew
 sample_info = {
     "q#bar{q}#rightarrow ZZ,Z#gamma*": dict(
         fill_color = "#99ccff",
@@ -29,7 +31,8 @@ sample_info = {
         line_color = "#000099",
         eras       = {
             "2022_EE": dict(
-                samples = sample_paths(path_MC, ['ggTo2e2mu_Contin_MCFM701', 'ggTo2e2tau_Contin_MCFM701', 'ggTo2mu2tau_Contin_MCFM701']), # need 4l,
+                #samples = sample_paths(path_MC, ['ggTo2e2mu_Contin_MCFM701', 'ggTo2e2tau_Contin_MCFM701', 'ggTo2mu2tau_Contin_MCFM701']),
+                samples = sample_paths(path_MC, ['ggTo2e2mu_Contin_MCFM701']), # Missing 4e(mu) (should I include Taus?)
                 lum     = lumi_EFG
             )
         }
@@ -83,7 +86,13 @@ sample_info = {
                 lum     = lumi_EFG
             )
         }              
-    ),
+    )
+}
+
+# Not that ZpX is modelled as a landau function
+# normalized to current lumi, so it can only be
+# currently filled for mass histograms
+Zpx = {
     "Z+X": dict(
         fill_color = "#669966",
         line_color = "#003300",
@@ -96,24 +105,28 @@ sample_info = {
     )
 }
 
+# ZZ mass: (70, 1002, 4)
+# Z  mass: (40, 120, 2)
+
 hist_info = dict(
-        prop  = "pt",
-        which = "ZZ",
+        prop  = "cos",
+        which = "Z1",
         reg   = "SR",
-        xlow  = 0.,
-        xhigh = 1500.,
-        step  = 10.,
+        xlow  = -1.0,
+        xhigh = 1.0,
+        step  = 0.1,
     )
 
 plot_info = dict(
-    x_range    = (0., 1000.),
+    x_range    = (-1.2, 1.2),
     y_min      = 0,
-    x_title    = "p_T^{#it{4l}} (GeV)",
-    logx       = True,
-    logy       = True,
-    xlabels    = [80, 100, 200, 300, 400, 500],
+    x_title    = "cos(#theta)",
+    logx       = False,
+    logy       = False,
+    #xlabels    = [80, 100, 200, 300, 400, 500],
+    xlabels    = None,
     legend_loc = (0.72, 0.70, 0.94, 0.92),
-    out_file   = "{}_{}_step_{}_fifthSamples_TESTING".format(hist_info["which"], hist_info["prop"], hist_info["step"]),
+    out_file   = "{}_{}_step_{}_".format(hist_info["which"], hist_info["prop"], hist_info["step"]),
     format     = "png"
 )
 plot_info.update(

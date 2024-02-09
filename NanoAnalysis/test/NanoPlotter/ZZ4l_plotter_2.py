@@ -53,18 +53,28 @@ class ZZHists:
 
         df = ROOT.RDataFrame("Events", samples)
 
-        breakpoint()
-
         if proc != "Data" and proc != "Data":
             Runs = ROOT.RDataFrame("Runs", samples)
             df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
-        if hist_info["reg"]=="SR":
-            col = self._sig_col(hist_info["which"], hist_info["prop"])
-            filt = self._filt_sr(df).Define(hist_info["which"], "{}[bestCandIdx]".format(col))
+        if hist_info["prop"] != "cos":
+            if hist_info["reg"]=="SR":
+                col = self._sig_col(hist_info["which"], hist_info["prop"])
+                filt = self._filt_sr(df).Define(hist_info["which"], "{}[bestCandIdx]".format(col))
+            else:
+                col = self._cr_col(hist_info["which"], hist_info["prop"])
+                filt = self._filt_cr(df, hist_info["reg"]).Define(hist_info["which"], "{}[ZLLbest{}Idx]".format(col, hist_info["reg"]))
         else:
-            col = self._cr_col(hist_info["which"], hist_info["prop"])
-            filt = self._filt_cr(df, hist_info["reg"]).Define(hist_info["which"], "{}[ZLLbest{}Idx]".format(col, hist_info["reg"]))
+            # eta = -ln(tan(theta/2))
+            # -> theta = 2*arctan(exp(-eta))
+            # -> cos   = cos(2*arctan(exp(-eta)))
+            if hist_info["reg"] == "SR":
+                #eta_filt = self._filt_sr(df).Define("good_ZZeta", "ZZCand_eta[bestCandIdx]")
+                eta_filt = self._filt_sr(df).Define(hist_info["which"], "{}Cand_eta[bestCandIdx]".format(hist_info["which"]))
+            else:
+                eta_filt = self._fill_cr(df).Define(hist_info["which"], "{}Cand_eta[bestCandIdx]".format(hist_info["which"]))
+
+            filt  = eta_filt.Define("{}cos".format(hist_info["which"]), "cos(2*atan(exp(-{})))".format(hist_info["which"]))
 
         if proc != "Data" and proc != "Data":
             # In CRs ZZCand_dataMCWeight is 0.0 ...
@@ -220,8 +230,7 @@ class ZZPlotter:
         in the configuration file and saved in kwargs."""
         CMS_lumi.writeExtraText       = True
         CMS_lumi.extraText            = "Preliminary"
-        #CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(Lum*1e-3, 1))
-        CMS_lumi.lumi_sqrtS           = "27.01 fb-1 (13.6 TeV)"
+        CMS_lumi.lumi_sqrtS           = "{} fb-1 (13.6 TeV)".format(round(kwargs["lumin"], 3)*1e-3)
         CMS_lumi.cmsTextSize          = 1
         CMS_lumi.lumiTextSize         = 0.7
         CMS_lumi.extraOverCmsTextSize = 0.75
