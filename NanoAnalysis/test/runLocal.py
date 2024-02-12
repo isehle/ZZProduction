@@ -105,11 +105,11 @@ elif SampleToRun == "ZZTo4L_2022EE":
     setConf("SAMPLENAME", "ZZTo4L")
     setConf("XSEC", 1.39)
     setConf("LEPTON_SETUP", 2022)
-    setConf("NANOVERSION", 11)
+    setConf("NANOVERSION", 12)
     setConf("IsMC", True)
     setConf("store", "root://cms-xrd-global.cern.ch/")
     setConf("fileNames", [
-        "/store/mc/Run3Summer22EENanoAODv11/ZZto4L_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/126X_mcRun3_2022_realistic_postEE_v1-v2/2810000/06da713c-4abc-4b80-a50b-d38bc3974588.root"
+        "/store/mc/Run3Summer22EENanoAODv12/ZZto4L_TuneCP5_13p6TeV_powheg-pythia8/NANOAODSIM/130X_mcRun3_2022_realistic_postEE_v6-v2/2520000/090f5342-0778-41d6-a500-a360f578ae93.root"
     ])
 
 #####################################################################

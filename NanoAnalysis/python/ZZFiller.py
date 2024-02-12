@@ -11,8 +11,79 @@ from PhysicsTools.HeppyCore.utils.deltar import deltaR
 from ROOT import LeptonSFHelper
 
 from functools import cmp_to_key
-from ROOT import Mela, SimpleParticle_t, SimpleParticleCollection_t, TVar, TLorentzVector
+from ROOT import Mela, SimpleParticle_t, SimpleParticleCollection_t, TVar, TLorentzVector, TLorentzRotation, TMath
 from ctypes import c_float
+
+class AngularVars:
+    def __init__(self, ZZ):
+        self.ZZ   = ZZ
+        self.Z    = lambda z: self.ZZ.Z1 if z==1 else self.ZZ.Z2
+        self.lep  = lambda z, l: z.l1DressedP4() if l==1 else z.l2DressedP4()
+        self.lep_m = lambda z: z.l1DressedP4 if abs(z.l1.pdgId) == z.l1.pdgId else z.l2DressedP4
+        self.lep_p = lambda z: z.l1DressedP4 if abs(z.l1.pdgId) == -z.l1.pdgId else z.l2DressedP4
+        self.el_mass = 5.109989461e-4
+        self.mu_mass = 0.1056583745
+
+    def _boost_to_cm(self, v1, v2):
+        """Returns v1 4-vector in the v2 rest frame."""
+        boost_to_v2 = TLorentzRotation(v2.BoostVector()).Inverse()
+        return v1.Transform(boost_to_v2)
+    
+    def get_cosTheta(self, theta=1):
+        """cosTheta = <v, w>/||v||||w||,
+        v: l- in Z rest frame,
+        w: Z in 4l rest frame
+        """
+        the_z   = self.Z(theta)
+        the_lep = self.lep_m(the_z)
+
+        boosted_lep = self._boost_to_cm(the_lep, the_z.p4) # l- in z rest frame
+        boosted_zed = self._boost_to_cm(the_z.p4, self.ZZ.p4) # z in 4l rest frame
+
+        '''try:
+            cos = (boosted_lep.Dot(boosted_zed))/(boosted_lep.M()*boosted_zed.M())
+        except ZeroDivisionError:
+            lep_mass = self.el_mass if abs(the_z.l1.pdgId) == 11 else self.mu_mass
+            cos = (boosted_lep.Dot(boosted_zed))/(lep_mass*boosted_zed.M())'''
+
+        return TMath.Cos(boosted_lep.Angle(boosted_zed.Vect()))
+
+    '''def _lep_inZrest(self, theta=1):
+        """Returns the l- 4-vector in its associated Z restframe:
+        Z = l- + l+,
+        l- = Z - l+,
+        l- = (mZ - E_l+, -p_l+)
+        """
+        the_z = self.Z(theta)
+
+        the_lp = self.lep_p(the_z)
+
+        l1_en = the_z.M - the_lp.E()
+        l1_p = - the_lp.Vect()
+
+        return TLorentzVector(l1_p, l1_en)
+    
+    def _z_in4lrest(self, theta=1):
+        """Returns in the Z 4-vector in the 4l restframe:
+        Z1 + Z2 = l1- + l1+ + l2- + l2+,
+        Z1 = l1- + l1+ + l2- + l2+ - Z2,
+        Z1 = (sum(m_l) - E_Z2, -p_Z2)
+        """
+        l_masses = self.lep_m(self.Z(1)).M() + \
+                   self.lep_p(self.Z(1)).M() + \
+                   self.lep_m(self.Z(2)).M() + \
+                   self.lep_p(self.Z(2)).M()
+        
+        z_en = l_masses - self.Z(2).p4.E() if theta==1 else self.Z(1).p4.E()
+        z_p  = -self.Z(2).p4.Vect() if theta==1 else -self.Z(1).p4.Vect()
+
+        return TLorentzVector(z_p, z_en)
+    
+    def get_theta(self, theta=1):
+        """"""
+        lep = self._lep_inZrest(theta)
+        zed = self._z_in4lrest(theta)
+        return lep.Angle(zed.Vect())'''
 
 class StoreOption:
     # Define which SR candidates should be stored:
@@ -21,7 +92,6 @@ class StoreOption:
     # AllWithRelaxedMuId = keep any SR candidate that can be made, even if leptons don't pass ID cuts (useful for ID cut optimization studies).
     # Note: For CRs the best candidate for each of the ZLL CRs that is activated with addSSCR, addOSCR, addSIPCR is stored. 
     BestCandOnly, AllCands, AllWithRelaxedMuId = range(0,3)
-
 
 class ZZFiller(Module):
 
@@ -153,6 +223,13 @@ class ZZFiller(Module):
         self.out.branch("ZZCand_Z1l2Idx", "S", lenVar="nZZCand", title="Index of 2nd Z1 daughter in the Electron+Muon merged collection")
         self.out.branch("ZZCand_Z2l1Idx", "S", lenVar="nZZCand", title="Index of 1st Z2 daughter in the Electron+Muon merged collection")
         self.out.branch("ZZCand_Z2l2Idx", "S", lenVar="nZZCand", title="Index of 2nd Z2 daughter in the Electron+Muon merged collection")
+
+        # For polarization studies
+        #self.out.branch("ZZCand_theta1", "F", lenVar="nZZCand", title="Angle between Z1.l1 in Z1 rest frame and Z1 in 4l rest frame")
+        #self.out.branch("ZZCand_theta3", "F", lenVar="nZZCand", title="Angle between Z2.l1 in Z2 rest frame and Z2 in 4l rest frame")
+
+        self.out.branch("ZZCand_cosTheta1", "F", lenVar="nZZCand", title="theta defined between Z1.l1 in Z1 rest frame and Z1 in 4l rest frame")
+        self.out.branch("ZZCand_cosTheta3", "F", lenVar="nZZCand", title="theta define between Z2.l1 in Z2 rest frame and Z2 in 4l rest frame")
         for ID in self.muonIDs :
             self.out.branch("ZZCand_mu"+ID["name"], "O", lenVar="nZZCand")
         for var in self.muonIDVars :
@@ -432,6 +509,12 @@ class ZZFiller(Module):
         ZZCand_wDataMC = [0.]*len(ZZs)
         ZZCand_passID    = [[] for il in range(len(self.muonIDs))]
         ZZCand_worstVar  = [[] for il in range(len(self.muonIDVars))]
+
+        #ZZCand_theta1 = [0.]*len(ZZs)
+        #ZZCand_theta3 = [0.]*len(ZZs)
+
+        ZZCand_cosTheta1 = [0.]*len(ZZs)
+        ZZCand_cosTheta3 = [0.]*len(ZZs)
         
         for iZZ, ZZ in enumerate(ZZs) :
             ZZCand_mass[iZZ] = ZZ.p4.M()
@@ -461,6 +544,18 @@ class ZZFiller(Module):
             ZZCand_Z2l2Idx[iZZ] = ZZ.Z2.l2Idx
             ZZCand_KD[iZZ] = ZZ.KD
             ZZCand_Z2sumpt[iZZ] = ZZ.Z2.sumpt()
+
+            #ZZCand_theta1[iZZ] = get_theta(ZZ)
+            #ZZCand_theta3[iZZ] = get_theta(ZZ, theta=3)
+
+            ang_vars = AngularVars(ZZ)
+
+            #ZZCand_theta1[iZZ] = ang_vars.get_theta()
+            #ZZCand_theta3[iZZ] = ang_vars.get_theta(theta=3)
+
+            ZZCand_cosTheta1[iZZ] = ang_vars.get_cosTheta()
+            ZZCand_cosTheta3[iZZ] = ang_vars.get_cosTheta(theta=3)
+
             if self.year < 2022 : #FIXME
                 if self.isMC: ZZCand_wDataMC[iZZ] =  self.getDataMCWeight(ZZ.leps())
             else :
@@ -497,6 +592,12 @@ class ZZFiller(Module):
         self.out.fillBranch("ZZCand_Z1l2Idx", ZZCand_Z1l2Idx)
         self.out.fillBranch("ZZCand_Z2l1Idx", ZZCand_Z2l1Idx)
         self.out.fillBranch("ZZCand_Z2l2Idx", ZZCand_Z2l2Idx)
+
+        #self.out.fillBranch("ZZCand_theta1", ZZCand_theta1)
+        #self.out.fillBranch("ZZCand_theta3", ZZCand_theta3)
+        self.out.fillBranch("ZZCand_cosTheta1", ZZCand_cosTheta1)
+        self.out.fillBranch("ZZCand_cosTheta3", ZZCand_cosTheta3)
+
         for iID, ID in enumerate(self.muonIDs) :
             self.out.fillBranch("ZZCand_mu"+ID["name"], ZZCand_passID[iID])
         for iVar, var in enumerate(self.muonIDVars) :
