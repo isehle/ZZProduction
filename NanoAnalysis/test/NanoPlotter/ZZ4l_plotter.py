@@ -6,6 +6,8 @@ from __future__ import print_function
 import os
 import datetime
 
+import time
+
 import math
 import ctypes
 import numpy as np
@@ -38,15 +40,62 @@ class ZZHists:
         self._sig_col   = lambda which, prop: "ZZCand_{}{}".format("" if which=="ZZ" else which, prop)
         self._cr_col    = lambda which, prop: "ZLLCand_{}{}".format("" if which=="ZZ" else which, prop)
         self._sel_col   = lambda which, prop, reg: self._sig_col(which, prop) if reg=="SR" else self._cr_col(which, prop)
-    
-    def _defCand(self, df, hist_info, prop=None):
+
+        self._lep_col    = lambda lep, prop: f"{lep}_{prop}"
+        self._lep_arrs   = lambda df, Z, prop: df.AsNumpy(["Electron_charge",
+                                                           "Muon_charge",
+                                                           "ZZCand_{}flav".format(Z),
+                                                           self._lep_col("Electron", prop),
+                                                           self._lep_col("Muon", prop)])
+
+        self._weight_arrs = lambda df: df.AsNumpy(["overallEventWeight",
+                                                   "ZZCand_dataMCWeight",
+                                                   "genEventSumw"])
+        
+        self._get_lep_arr = lambda dict, key: np.array(
+            list(
+                map(
+                    lambda x: x[0], dict[key]
+                )
+            )
+        )
+
+        self._charge_mask = lambda charges, lep: charges==-1 if lep=="lm" else charges==1
+
+    def _cand_from_df(self, df, hist_info, prop=None):
         reg_filt = self._filt_df(df, hist_info["reg"]) if self.new_col is None else df
 
         true_prop = hist_info["prop"] if prop is None else prop
+
         sel_col = self._sel_col(hist_info["which"], true_prop, hist_info["reg"])
+
         self.new_col = "{}_{}".format(hist_info["which"], true_prop)
 
         return reg_filt.Define(self.new_col, "{}[{}]".format(sel_col, self._idx(hist_info["reg"])))
+
+    def _cand_from_np(self, df, hist_info):
+        the_z, _ = hist_info["which"].split("_")
+
+        filt = self._filt_df(df, hist_info["reg"])
+        lep_arrs = self._lep_arrs(filt, the_z, hist_info["prop"])
+
+        if hist_info["weight"]:
+            overall_weight = self._get_overall_weight(filt)
+
+        props = {}
+        for lep in ("Electron", "Muon"):
+            prop = self._get_lep_arr(lep_arrs, "{}_{}".format(lep, hist_info["prop"]))
+            mask = self._get_mask(lep_arrs, lep, hist_info)
+            props[lep] = prop[mask]*overall_weight[mask] if hist_info["weight"] else prop[mask]
+        
+        good_lep_prop = np.concatenate(list(props.values()))
+
+        # ROOT >= 6.28 this is ROOT.RDF.FromNumpy()
+        return ROOT.RDF.MakeNumpyDataFrame(
+            {
+                "Lepton_{}".format(hist_info["prop"]): good_lep_prop
+            }
+        )
     
     def _defCosTheta(self, df, hist_info):
         eta_cand = self.new_col
@@ -58,6 +107,11 @@ class ZZHists:
         title = hist_info["which"] + "_" + proc
         xhigh, xlow = hist_info["xhigh"], hist_info["xlow"]
         nbins = int((xhigh - xlow)/hist_info["step"])
+
+        # TEMPORARY : NEED TO HANDLE DATA SOMEHOW
+        if "_" in hist_info["which"]:
+            self.new_col = "Lepton_{}".format(hist_info["prop"])
+            return filt.Histo1D((name, title, nbins, xlow, xhigh), self.new_col).GetValue()
 
         if proc != "Data":
             if hist_info["reg"] == "SR":
@@ -72,7 +126,26 @@ class ZZHists:
             hist.SetBinErrorOption(ROOT.TH1.kPoisson)
 
         return hist
+    
+    def _get_mask(self, lep_arrs, lep, hist_info):
+        pdg = -121 if lep=="Electron" else -169
+        the_z, the_l = hist_info["which"].split("_")
 
+        all_zflav      = self._get_lep_arr(lep_arrs, "ZZCand_{}flav".format(the_z))
+        all_lep_charge = self._get_lep_arr(lep_arrs, "{}_charge".format(lep))
+        all_lep_prop   = self._get_lep_arr(lep_arrs, "{}_{}".format(lep, hist_info["prop"]))
+
+        lep_charge_mask       = self._charge_mask(all_lep_charge, the_l)
+        z_to_lep_mask         = all_zflav == pdg
+        return lep_charge_mask & z_to_lep_mask
+
+    def _get_overall_weight(self, df):
+        weight_arrs = self._weight_arrs(df)
+        event_weight, genEventSum = weight_arrs["overallEventWeight"], weight_arrs["genEventSumw"]
+        data_MCweight = self._get_lep_arr(weight_arrs, "ZZCand_dataMCWeight")
+
+        return event_weight*data_MCweight/genEventSum
+    
     def _fill_hist(self, proc_info, hist_info):
         """Fills and weighs 1D histograms of the
         intereseted property (info["prop"]) for the
@@ -82,16 +155,17 @@ class ZZHists:
         samples = proc_info["samples"].values()
 
         df = ROOT.RDataFrame("Events", samples)
-
         if proc != "Data":
             Runs = ROOT.RDataFrame("Runs", samples)
             df = df.Define("genEventSumw", str(Runs.Sum("genEventSumw").GetValue()))
 
         if hist_info["prop"] == "cos":
-            eta_df = self._defCand(df, hist_info, prop="eta") # theta is defined by the eta of selected cands
+            eta_df = self._cand_from_df(df, hist_info, prop = "eta") # theta is defined by the eta of selected cands
             filt   = self._defCosTheta(eta_df, hist_info)
+        elif "_" in hist_info["which"]:
+            filt = self._cand_from_np(df, hist_info)
         else:
-            filt = self._defCand(df, hist_info)
+            filt = self._cand_from_df(df, hist_info)
 
         hist = self._getHist(filt, hist_info, proc)
         if proc != "Data": hist.Scale(proc_info["lum"])
@@ -164,6 +238,69 @@ class ZZPlotter:
 
         return xlabels
     
+    def _get_sqrt(self, hist):
+        hist_sqrt = hist.Clone("hist_sqrt")
+        for i in range(1, hist.GetNbinsX()+1):
+            bin_content = hist.GetBinContent(i)
+            bin_error   = hist.GetBinError(i)
+
+            # Temporary fix, why do we have some bins with negative values??
+            if bin_content < 0: bin_content = 0
+            
+            new_content = ROOT.TMath.Sqrt(bin_content)
+            new_error   = bin_error / (2*new_content) if new_content != 0 else 0
+
+            if np.isnan(new_content):
+                breakpoint()
+
+            hist_sqrt.SetBinContent(i, new_content)
+            hist_sqrt.SetBinError(i, new_error)
+
+        return hist_sqrt
+
+    def _get_ratio(self, plot_info):
+        Sig = self.zz.hists['q#bar{q}#rightarrow ZZ,Z#gamma*'].Clone("Sig")
+        Sig.Add(self.zz.hists["gg#rightarrow ZZ,Z#gamma*"])
+
+        Bkg = self.zz.hists["DY"].Clone("Bkg")
+        for proc in ['WZ', 't#bar{t}', 'VVV', 'H(125)']:
+            Bkg.Add(self.zz.hists[proc])
+        
+        Sqrt_Bkg = self._get_sqrt(Bkg)
+
+        Ratio = Sig.Clone("Ratio")
+        Ratio.SetLineColor(1)
+        Ratio.SetMarkerStyle(21)
+        Ratio.SetTitle("")
+        Ratio.Sumw2()
+        Ratio.SetStats(0)
+        Ratio.Divide(Sqrt_Bkg)
+
+        for i in range(1, Ratio.GetNbinsX()+1):
+            if np.isnan(Ratio.GetBinContent(i)):
+                breakpoint()
+
+        y = Ratio.GetYaxis()
+        y.SetTitle(r"$Sig/\sqrt{Bkg} $")
+        y.SetNdivisions(505)
+        y.SetTitleSize(20)
+        y.SetTitleFont(43)
+        y.SetTitleOffset(1.55)
+        y.SetLabelFont(43)
+        y.SetLabelSize(15)
+
+        # Adjust x-axis settings
+        x = Ratio.GetXaxis()
+        x.SetTitleSize(30)
+        x.SetTitleFont(43)
+        x.SetTitleOffset(1.0)
+        x.SetLabelFont(43)
+        x.SetLabelSize(15)
+        x.SetLabelSize(30)
+        x.SetTitle(plot_info["x_title"])
+
+        return Ratio
+    
     def _get_hStacks(self, **kwargs):
         """Create HStack from individual histograms."""
         hist_info = kwargs["hist_info"]
@@ -182,7 +319,17 @@ class ZZPlotter:
                 
                 h.SetLineColor(ROOT.TColor.GetColor(line_color))
                 h.SetFillColor(ROOT.TColor.GetColor(fill_color))
+
                 HStack.Add(h, "HISTO")
+
+        yhmax = math.ceil(max(HStack.GetMaximum(), 0.)) + 15.
+        if plot_info["logy"] and plot_info["y_min"]==0:
+            yhmin = 1e-3
+        else:
+            yhmin = kwargs["plot_info"]["y_min"]
+
+        HStack.SetMinimum(yhmin)
+        HStack.SetMaximum(yhmax)
 
         return HStack
     
@@ -224,11 +371,10 @@ class ZZPlotter:
         Legend.SetLineColor(ROOT.kWhite)
         Legend.SetTextFont(43)
         Legend.SetTextSize(20)
-        Legend.Draw()
 
         return Legend
     
-    def _set_lumi(self, Canvas, **kwargs):
+    def _set_lumi(self, pad, **kwargs):
         """Set up CMS lumi info--this info should be set
         in the configuration file and saved in kwargs."""
         CMS_lumi.writeExtraText       = True
@@ -238,10 +384,9 @@ class ZZPlotter:
         CMS_lumi.lumiTextSize         = 0.7
         CMS_lumi.extraOverCmsTextSize = 0.75
         CMS_lumi.relPosX              = 0.12
-        CMS_lumi.CMS_lumi(Canvas, 0, 0)
-        Canvas.Update()
+        CMS_lumi.CMS_lumi(pad, 0, 0)
     
-    def _save_plot(self, Canvas, reg, **kwargs):
+    def _out_path(self, reg, **kwargs):
         """Set up plot directory (based on the date),
         the plot title (based on the plot info) and saves
         the plot."""
@@ -256,52 +401,96 @@ class ZZPlotter:
                                       "logX" if kwargs["logx"] else "linX",
                                       "logY" if kwargs["logy"] else "linY",
                                       kwargs["format"])
+        
+        return os.path.join(reg_direc, plot_path)
+    
+    def _write_pads(self, Canvas, **kwargs):
+        hist_pad = ROOT.TPad("hist_pad", "hist_pad", 0, 0.3, 1, 0.95)
 
-        Canvas.SaveAs(os.path.join(reg_direc, plot_path))
+        hist_pad.SetBottomMargin(0)
+        hist_pad.SetGridx()
+
+        if kwargs["logx"]: hist_pad.SetLogx()
+        if kwargs["logy"]: hist_pad.SetLogy()
+
+        Canvas.cd()
+
+        ratio_pad = ROOT.TPad("ratio_pad", "ratio_pad", 0, 0.1, 1, 0.3)
+
+        ratio_pad.SetTopMargin(0)
+        ratio_pad.SetBottomMargin(0.35)
+        ratio_pad.SetGridx()
+
+        if kwargs["logx"]: ratio_pad.SetLogx()
+        if kwargs["ratio_diff"] > 1e2: ratio_pad.SetLogy()
+
+        return hist_pad, ratio_pad
+    
+    def canvas_setup(self, **kwargs):
+
+        self._set_gStyle()
+
+        plot_info = kwargs["plot_info"]
+
+        c_size = (1200, 1200) if "c_size" not in plot_info else plot_info["c_size"]
+        Canvas = ROOT.TCanvas(kwargs["hist_info"]["prop"], kwargs["hist_info"]["prop"], c_size[0], c_size[1])
+        
+        return Canvas
 
     def plot(self, **kwargs):
         """Main plotting function, primarily acting
         as a wrapper for the class's primary functions."""
 
-        self._set_gStyle()
-
-        Canvas = ROOT.TCanvas(kwargs["hist_info"]["prop"], kwargs["hist_info"]["prop"],900, 700)
-        Canvas.SetTicks()
-
         HStack = self._get_hStacks(**kwargs)
-        yhmax  = math.ceil(max(HStack.GetMaximum(), 0.)) + 15.
 
-        HStack.Draw("histo")
-        HStack.GetXaxis().SetRangeUser(*kwargs["plot_info"]["x_range"])
-
-        if kwargs["plot_info"]["logy"] and kwargs["plot_info"]["y_min"]==0:
-            yhmin = 1e-3
-        else:
-            yhmin = kwargs["plot_info"]["y_min"]
-
-        HStack.SetMinimum(yhmin)
-        HStack.SetMaximum(yhmax)
-
+        data = False
         if "Data" in kwargs["proc_info"]:
             Data = self._get_data(**kwargs)
-            Data.Draw("samePE1")
+            data = True
 
+        plot_path = self._out_path(kwargs["hist_info"]["reg"], **kwargs["plot_info"])
+
+        Canvas = self.canvas_setup(**kwargs)
         Legend = self._get_legend(kwargs["plot_info"]["legend_loc"])
 
-        self._set_lumi(Canvas, **kwargs)
+        if kwargs["plot_info"]["ratio"]:
+            Ratio = self._get_ratio(kwargs["plot_info"])
 
-        if kwargs["plot_info"]["xlabels"] is not None:
-            xlabels = self._get_xlabels(kwargs["plot_info"]["xlabels"])
-            for label in xlabels:
-                label.Draw()
-            ROOT.gPad.RedrawAxis()
+            kwargs["plot_info"]["ratio_diff"] = Ratio.GetMaximum() - Ratio.GetMinimum()
 
-        if kwargs["plot_info"]["logx"]:
-            Canvas.SetLogx()
-        if kwargs["plot_info"]["logy"]:
-            Canvas.SetLogy()
+            hist_pad, ratio_pad = self._write_pads(Canvas, **kwargs["plot_info"])
 
-        self._save_plot(Canvas, kwargs["hist_info"]["reg"], **kwargs["plot_info"])
+            hist_pad.Draw()
+            hist_pad.cd()
+            HStack.Draw("histo")
+            HStack.GetXaxis().SetRangeUser(*kwargs["plot_info"]["x_range"])
+
+            if data:
+                Data.Draw("samePE1")
+            
+            Legend.Draw()
+
+            self._set_lumi(hist_pad, **kwargs)
+            hist_pad.Update()
+
+            Canvas.cd()
+
+            ratio_pad.Draw()
+
+            ratio_pad.cd()
+
+            Ratio.Draw("ep")
+        else:
+            HStack.Draw("histo")
+            if data:
+                Data.Draw("samePE1")
+            Legend.Draw()
+
+            self._set_lumi(Canvas, **kwargs)
+            Canvas.Update()
+
+        Canvas.SaveAs(plot_path)
+
 
 if __name__ == "__main__":
     import importlib.util
