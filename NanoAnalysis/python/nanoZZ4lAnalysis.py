@@ -45,6 +45,8 @@ APPLY_K_NNLOEW_ZZQQB  = getConf("APPLY_K_NNLOEW_ZZQQB", False)
 # Add separate tree with gen info for all events
 ADD_ALLEVENTS = getConf("ADD_ALLEVENTS", False)
 
+inclZZ = getConf("inclZZ", True)
+
 if "UL" in DATA_TAG : preUL = False # used to set the correct electron selection
 else: preUL = True
 
@@ -126,7 +128,7 @@ if not IsMC :
 
 # Standard sequence used for both data and MC
 reco_sequence = [lepFiller(cuts, LEPTON_SETUP), # FSR and FSR-corrected iso; flags for passing IDs
-                 ZZFiller(runMELA, bestCandByMELA, IsMC, LEPTON_SETUP, PROCESS_CR, addZL=PROCESS_ZL, debug=DEBUG), # Build ZZ candidates; choose best candidate; filter events with candidates
+                 ZZFiller(runMELA, bestCandByMELA, IsMC, LEPTON_SETUP, PROCESS_CR, addZL=PROCESS_ZL, debug=DEBUG, inclZZ=inclZZ), # Build ZZ candidates; choose best candidate; filter events with candidates
                  jetFiller(), # Jets cleaning with leptons
                  ZZExtraFiller('SR'), # Add information on extra objects to the selected best candidate
                  # MELAFiller(), # Compute the full set of discriminants for the best candidate

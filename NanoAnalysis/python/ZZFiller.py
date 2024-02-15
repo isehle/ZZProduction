@@ -40,50 +40,7 @@ class AngularVars:
         boosted_lep = self._boost_to_cm(the_lep, the_z.p4) # l- in z rest frame
         boosted_zed = self._boost_to_cm(the_z.p4, self.ZZ.p4) # z in 4l rest frame
 
-        '''try:
-            cos = (boosted_lep.Dot(boosted_zed))/(boosted_lep.M()*boosted_zed.M())
-        except ZeroDivisionError:
-            lep_mass = self.el_mass if abs(the_z.l1.pdgId) == 11 else self.mu_mass
-            cos = (boosted_lep.Dot(boosted_zed))/(lep_mass*boosted_zed.M())'''
-
         return TMath.Cos(boosted_lep.Angle(boosted_zed.Vect()))
-
-    '''def _lep_inZrest(self, theta=1):
-        """Returns the l- 4-vector in its associated Z restframe:
-        Z = l- + l+,
-        l- = Z - l+,
-        l- = (mZ - E_l+, -p_l+)
-        """
-        the_z = self.Z(theta)
-
-        the_lp = self.lep_p(the_z)
-
-        l1_en = the_z.M - the_lp.E()
-        l1_p = - the_lp.Vect()
-
-        return TLorentzVector(l1_p, l1_en)
-    
-    def _z_in4lrest(self, theta=1):
-        """Returns in the Z 4-vector in the 4l restframe:
-        Z1 + Z2 = l1- + l1+ + l2- + l2+,
-        Z1 = l1- + l1+ + l2- + l2+ - Z2,
-        Z1 = (sum(m_l) - E_Z2, -p_Z2)
-        """
-        l_masses = self.lep_m(self.Z(1)).M() + \
-                   self.lep_p(self.Z(1)).M() + \
-                   self.lep_m(self.Z(2)).M() + \
-                   self.lep_p(self.Z(2)).M()
-        
-        z_en = l_masses - self.Z(2).p4.E() if theta==1 else self.Z(1).p4.E()
-        z_p  = -self.Z(2).p4.Vect() if theta==1 else -self.Z(1).p4.Vect()
-
-        return TLorentzVector(z_p, z_en)
-    
-    def get_theta(self, theta=1):
-        """"""
-        lep = self._lep_inZrest(theta)
-        zed = self._z_in4lrest(theta)
-        return lep.Angle(zed.Vect())'''
 
 class StoreOption:
     # Define which SR candidates should be stored:
@@ -95,7 +52,7 @@ class StoreOption:
 
 class ZZFiller(Module):
 
-    def __init__(self, runMELA, bestCandByMELA, isMC, year, processCR, addZL=False, debug=False):
+    def __init__(self, runMELA, bestCandByMELA, isMC, year, processCR, addZL=False, debug=False, inclZZ=False):
         print("***ZZFiller: isMC:", isMC, "year:", year, flush=True)
         self.writeHistFile = False
         self.isMC = isMC
@@ -112,6 +69,9 @@ class ZZFiller(Module):
         self.addZLCR = addZL
 
         self.DEBUG = debug
+
+        self.inclZZ = inclZZ # Slightly different SR for pp-->ZZ than pp-->H-->ZZ
+
         self.ZmassValue = 91.1876;
 
         self.candsToStore = StoreOption.BestCandOnly # Only store the best candidate for the SR
@@ -225,9 +185,6 @@ class ZZFiller(Module):
         self.out.branch("ZZCand_Z2l2Idx", "S", lenVar="nZZCand", title="Index of 2nd Z2 daughter in the Electron+Muon merged collection")
 
         # For polarization studies
-        #self.out.branch("ZZCand_theta1", "F", lenVar="nZZCand", title="Angle between Z1.l1 in Z1 rest frame and Z1 in 4l rest frame")
-        #self.out.branch("ZZCand_theta3", "F", lenVar="nZZCand", title="Angle between Z2.l1 in Z2 rest frame and Z2 in 4l rest frame")
-
         self.out.branch("ZZCand_cosTheta1", "F", lenVar="nZZCand", title="theta defined between Z1.l1 in Z1 rest frame and Z1 in 4l rest frame")
         self.out.branch("ZZCand_cosTheta3", "F", lenVar="nZZCand", title="theta define between Z2.l1 in Z2 rest frame and Z2 in 4l rest frame")
         for ID in self.muonIDs :
@@ -360,7 +317,7 @@ class ZZFiller(Module):
             for iZ,aZ in enumerate(Zs):
                 for jZ in range(iZ+1, len(Zs)):                    
                     if Zs[iZ].isOSSF and Zs[jZ].isOSSF : # 2 OSSSF Zs
-                        ZZ = self.makeCand(Zs[iZ],Zs[jZ])
+                        ZZ = self.makeCand(Zs[iZ],Zs[jZ],inclZZ=self.inclZZ)
                         if ZZ == None: continue
                         ZZs.append(ZZ)
 
@@ -380,7 +337,7 @@ class ZZFiller(Module):
                     if Z1.isSR : 
                         for iZ2,Z2 in enumerate(Zs):
                             if Z2.is1FCR or Z2.is2FCR or Z2.isSSCR or Z2.isSIPCR :
-                                ZLL = self.makeCand(Z1, Z2, sortZsByMass=False, fillIDVars=False)
+                                ZLL = self.makeCand(Z1, Z2, sortZsByMass=False, fillIDVars=False, inclZZ=self.inclZZ)
                                 if ZLL == None: continue
                                 if ZLL.Z2.is2FCR  and (best2P2FCRIdx<0 or self.bestCandCmp(ZLL,ZLLsTemp[best2P2FCRIdx]) < 0) : best2P2FCRIdx = len(ZLLsTemp)
                                 if ZLL.Z2.is1FCR  and (best3P1FCRIdx<0 or self.bestCandCmp(ZLL,ZLLsTemp[best3P1FCRIdx]) < 0) : best3P1FCRIdx = len(ZLLsTemp)
@@ -510,9 +467,6 @@ class ZZFiller(Module):
         ZZCand_passID    = [[] for il in range(len(self.muonIDs))]
         ZZCand_worstVar  = [[] for il in range(len(self.muonIDVars))]
 
-        #ZZCand_theta1 = [0.]*len(ZZs)
-        #ZZCand_theta3 = [0.]*len(ZZs)
-
         ZZCand_cosTheta1 = [0.]*len(ZZs)
         ZZCand_cosTheta3 = [0.]*len(ZZs)
         
@@ -545,13 +499,7 @@ class ZZFiller(Module):
             ZZCand_KD[iZZ] = ZZ.KD
             ZZCand_Z2sumpt[iZZ] = ZZ.Z2.sumpt()
 
-            #ZZCand_theta1[iZZ] = get_theta(ZZ)
-            #ZZCand_theta3[iZZ] = get_theta(ZZ, theta=3)
-
             ang_vars = AngularVars(ZZ)
-
-            #ZZCand_theta1[iZZ] = ang_vars.get_theta()
-            #ZZCand_theta3[iZZ] = ang_vars.get_theta(theta=3)
 
             ZZCand_cosTheta1[iZZ] = ang_vars.get_cosTheta()
             ZZCand_cosTheta3[iZZ] = ang_vars.get_cosTheta(theta=3)
@@ -593,8 +541,6 @@ class ZZFiller(Module):
         self.out.fillBranch("ZZCand_Z2l1Idx", ZZCand_Z2l1Idx)
         self.out.fillBranch("ZZCand_Z2l2Idx", ZZCand_Z2l2Idx)
 
-        #self.out.fillBranch("ZZCand_theta1", ZZCand_theta1)
-        #self.out.fillBranch("ZZCand_theta3", ZZCand_theta3)
         self.out.fillBranch("ZZCand_cosTheta1", ZZCand_cosTheta1)
         self.out.fillBranch("ZZCand_cosTheta3", ZZCand_cosTheta3)
 
@@ -802,7 +748,7 @@ class ZZFiller(Module):
     # All relevant candidate variables are computed for the candidate. Options:
     #  sortZsByMass : set Z1 and Z2 according to closest-Mz criteria (for SR); otherwise, specified order is
     #                 kept (useful for CRs)
-    def makeCand(self, Za, Zb, sortZsByMass=True, fillIDVars=True) :
+    def makeCand(self, Za, Zb, sortZsByMass=True, fillIDVars=True, inclZZ=False) :
         # check that these Zs are mutually exclusive (not sharing the same lepton) 
         if Za.l1Idx==Zb.l1Idx or Za.l2Idx==Zb.l2Idx or Za.l2Idx==Zb.l1Idx or Za.l2Idx==Zb.l2Idx: return None
         
@@ -812,7 +758,11 @@ class ZZFiller(Module):
             Z1, Z2 = Z2, Z1
 
         # Z1 mass cut
-        if Z1.M <= 40. : return None
+        if not inclZZ:
+            if Z1.M <= 40. : return None
+        else:
+            # Tighter cuts for inclusive ZZ
+            if not (abs(Z1.M - self.ZmassValue) < 10 and abs(Z2.M - self.ZmassValue) < 10): return None
 
         zzleps = [Z1.l1, Z1.l2, Z2.l1, Z2.l2]
         lepPts = []
@@ -869,6 +819,7 @@ class ZZFiller(Module):
             print ("ERROR", p_GG_SIG_ghg2_1_ghz1_1_JHUGen, p_QQB_BKG_MCFM)
             p_QQB_BKG_MCFM = 1. # FIXME: fix for error with message: "TUtil::CheckPartonMomFraction: At least one of the parton momentum fractions is greater than 1."
         ZZ = self.ZZCand(Z1, Z2, p_GG_SIG_ghg2_1_ghz1_1_JHUGen, p_QQB_BKG_MCFM)
+        if not ZZ.p4.M() > 180: return None
 
         # Set flags for IDs passed by all leptons of candidate (muon only for the time being), which are 
         # used for studies on ID tuning
