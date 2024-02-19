@@ -19,6 +19,7 @@ from ZZAnalysis.NanoAnalysis.tools import getLeptons
 
 import CMSGraphics, CMS_lumi
 from H4l_draw_mZZ_periods2022 import getZX
+from RDF_Helpers import *
 
 # 1/fb--> 1/pb 2022EFG MC - Run3Summer22EE from https://twiki.cern.ch/twiki/bin/view/CMS/PdmVRun3Analysis
 Lum = 27.007e3  # w/ normtag, golden JSON
@@ -62,40 +63,37 @@ class ZZHists:
 
         self._charge_mask = lambda charges, lep: charges==-1 if lep=="lm" else charges==1
 
+    def _fill_lep_var(self, filt, hist_info, prop):
+        theZed, theLep = hist_info["which"].split("_")
+
+        charge = -1 if theLep=="lm" else 1
+
+        z_flav = "ZZCand_{}flav".format(theZed)
+        z_l1idx = "ZZCand_{}l1Idx".format(theZed)
+        z_l2idx = "ZZCand_{}l2Idx".format(theZed)
+
+        el_prop = "Electron_{}".format(prop)
+        mu_prop = "Muon_{}".format(prop)
+
+        self.new_col = "Lepton_{}".format(prop)
+
+        filt = filt.Define(self.new_col, "LepFromZ({}, Electron_charge, {}, Muon_charge, {}, {}, {}, {})".format(\
+            el_prop, mu_prop, z_flav, z_l1idx, z_l2idx, charge
+            ))
+
+        return filt
+
     def _cand_from_df(self, df, hist_info, prop=None):
         reg_filt = self._filt_df(df, hist_info["reg"]) if self.new_col is None else df
 
         true_prop = hist_info["prop"] if prop is None else prop
 
-        sel_col = self._sel_col(hist_info["which"], true_prop, hist_info["reg"])
-
-        self.new_col = "{}_{}".format(hist_info["which"], true_prop)
-
-        return reg_filt.Define(self.new_col, "{}[{}]".format(sel_col, self._idx(hist_info["reg"])))
-
-    def _cand_from_np(self, df, hist_info):
-        the_z, _ = hist_info["which"].split("_")
-
-        filt = self._filt_df(df, hist_info["reg"])
-        lep_arrs = self._lep_arrs(filt, the_z, hist_info["prop"])
-
-        if hist_info["weight"]:
-            overall_weight = self._get_overall_weight(filt)
-
-        props = {}
-        for lep in ("Electron", "Muon"):
-            prop = self._get_lep_arr(lep_arrs, "{}_{}".format(lep, hist_info["prop"]))
-            mask = self._get_mask(lep_arrs, lep, hist_info)
-            props[lep] = prop[mask]*overall_weight[mask] if hist_info["weight"] else prop[mask]
-        
-        good_lep_prop = np.concatenate(list(props.values()))
-
-        # ROOT >= 6.28 this is ROOT.RDF.FromNumpy()
-        return ROOT.RDF.MakeNumpyDataFrame(
-            {
-                "Lepton_{}".format(hist_info["prop"]): good_lep_prop
-            }
-        )
+        if "_" in hist_info["which"]:
+            return self._fill_lep_var(reg_filt, hist_info, true_prop)
+        else:
+            self.new_col = "{}_{}".format(hist_info["which"], true_prop)
+            sel_col = self._sel_col(hist_info["which"], true_prop, hist_info["reg"])
+            return reg_filt.Define(self.new_col, "{}[{}]".format(sel_col, self._idx(hist_info["reg"])))
     
     def _defCosTheta(self, df, hist_info):
         eta_cand = self.new_col
@@ -108,13 +106,8 @@ class ZZHists:
         xhigh, xlow = hist_info["xhigh"], hist_info["xlow"]
         nbins = int((xhigh - xlow)/hist_info["step"])
 
-        # TEMPORARY : NEED TO HANDLE DATA SOMEHOW
-        if "_" in hist_info["which"]:
-            self.new_col = "Lepton_{}".format(hist_info["prop"])
-            return filt.Histo1D((name, title, nbins, xlow, xhigh), self.new_col).GetValue()
-
         if proc != "Data":
-            if hist_info["reg"] == "SR":
+            if (hist_info["reg"] == "SR") and ("_" not in hist_info["which"]):
                 wgt = filt.Define("weight", "overallEventWeight*ZZCand_dataMCWeight/genEventSumw")
                 vec = wgt.Define(self.new_col+"_vec", "return ROOT::VecOps::RVec<Float_t>(weight.size(), {});".format(self.new_col))
                 hist = vec.Histo1D((name, title, nbins, xlow, xhigh), self.new_col+"_vec", "weight").GetValue()
@@ -126,25 +119,6 @@ class ZZHists:
             hist.SetBinErrorOption(ROOT.TH1.kPoisson)
 
         return hist
-    
-    def _get_mask(self, lep_arrs, lep, hist_info):
-        pdg = -121 if lep=="Electron" else -169
-        the_z, the_l = hist_info["which"].split("_")
-
-        all_zflav      = self._get_lep_arr(lep_arrs, "ZZCand_{}flav".format(the_z))
-        all_lep_charge = self._get_lep_arr(lep_arrs, "{}_charge".format(lep))
-        all_lep_prop   = self._get_lep_arr(lep_arrs, "{}_{}".format(lep, hist_info["prop"]))
-
-        lep_charge_mask       = self._charge_mask(all_lep_charge, the_l)
-        z_to_lep_mask         = all_zflav == pdg
-        return lep_charge_mask & z_to_lep_mask
-
-    def _get_overall_weight(self, df):
-        weight_arrs = self._weight_arrs(df)
-        event_weight, genEventSum = weight_arrs["overallEventWeight"], weight_arrs["genEventSumw"]
-        data_MCweight = self._get_lep_arr(weight_arrs, "ZZCand_dataMCWeight")
-
-        return event_weight*data_MCweight/genEventSum
     
     def _fill_hist(self, proc_info, hist_info):
         """Fills and weighs 1D histograms of the
@@ -162,12 +136,13 @@ class ZZHists:
         if hist_info["prop"] == "cos":
             eta_df = self._cand_from_df(df, hist_info, prop = "eta") # theta is defined by the eta of selected cands
             filt   = self._defCosTheta(eta_df, hist_info)
-        elif "_" in hist_info["which"]:
-            filt = self._cand_from_np(df, hist_info)
         else:
             filt = self._cand_from_df(df, hist_info)
 
         hist = self._getHist(filt, hist_info, proc)
+
+        self.new_col = None
+
         if proc != "Data": hist.Scale(proc_info["lum"])
 
         return hist
@@ -250,9 +225,6 @@ class ZZPlotter:
             new_content = ROOT.TMath.Sqrt(bin_content)
             new_error   = bin_error / (2*new_content) if new_content != 0 else 0
 
-            if np.isnan(new_content):
-                breakpoint()
-
             hist_sqrt.SetBinContent(i, new_content)
             hist_sqrt.SetBinError(i, new_error)
 
@@ -275,10 +247,6 @@ class ZZPlotter:
         Ratio.Sumw2()
         Ratio.SetStats(0)
         Ratio.Divide(Sqrt_Bkg)
-
-        for i in range(1, Ratio.GetNbinsX()+1):
-            if np.isnan(Ratio.GetBinContent(i)):
-                breakpoint()
 
         y = Ratio.GetYaxis()
         y.SetTitle(r"$Sig/\sqrt{Bkg} $")

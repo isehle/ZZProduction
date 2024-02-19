@@ -9,9 +9,9 @@ lumi_EFG  = 27.007e3 # 1/pb
 
 path_data_2022EFG = "/eos/cms/store/group/phys_higgs/cmshzz4l/cjlst/RunIII/231209_nano/Data2022_EFG/"
 
-path_MC = "/eos/user/i/iehle/Analysis/inclZZ_MC_2022EE_cosThetaIncluded"
+path_MC = "/eos/user/i/iehle/Analysis/inclZZ_MC_2022EE_tightSelection"
 
-ang_vars = ["eta", "cos", "phi"]
+ang_vars = ["eta", "cos", "phi", 'cosTheta1', 'cosTheta3']
 
 # "To first order L should always include taus but you should check." -- Andrew
 sample_info = {
@@ -107,25 +107,25 @@ Zpx = {
 # Z  mass: (40, 120, 2)
 
 hist_info = dict(
-        prop  = "pt",
-        which = "Z2",
+        prop  = "cos",
+        which = "Z2_lm",
         reg   = "SR",
-        xlow  = 0.,
-        xhigh = 1500.,
-        step  = 10,
-        weight= False # Current weights seem to be false, need to check # only affects single lepton distributions
+        xlow  = -1.,
+        xhigh = 1.,
+        step  = 0.05,
+        weight= True
     )
 
 plot_info = dict(
     ratio      = True,
-    x_range    = (0, 1500),
+    x_range    = (-1.2, 1.2),
     y_min      = 0,
-    x_title    = r"${p_T}^{2l}$ $\text{GeV}$",
+    x_title    = r"$cos(\theta_{l_2^-})$",
     logx       = False,
     logy       = False,
     xlabels    = None,
     legend_loc = (0.72, 0.70, 0.94, 0.92),
-    out_file   = "{}_{}_step_{}_withRatio_sqrt".format(hist_info["which"], hist_info["prop"], hist_info["step"]),
+    out_file   = "{}_{}_step_{}_tightZs".format(hist_info["which"], hist_info["prop"], hist_info["step"]),
     format     = "png"
 )
 plot_info.update(
