@@ -65,7 +65,7 @@ class AngularVars:
         z1_phi_rest  = rest_zed.Phi()
         z1_phi_4l    = lepFrame_zed.Phi()
 
-        return z1_phi_rest - z1_phi_4l
+        return (z1_phi_rest - z1_phi_4l) % 2*TMath.Pi()
 
 class StoreOption:
     # Define which SR candidates should be stored:
@@ -255,6 +255,13 @@ class ZZFiller(Module):
             self.out.branch("ZLLbest2P2FIdx", "S", title="best candidate for the 2P2F CR")
             self.out.branch("ZLLbest3P1FIdx", "S", title="best candidate for the 3P1F CR")
             self.out.branch("ZLLbestSIPCRIdx", "S", title="best candidate for the SIP CR")
+
+                    # For polarization studies
+            self.out.branch("ZLLCand_cosTheta1", "F", lenVar="nZLLCand")
+            self.out.branch("ZLLCand_cosTheta3", "F", lenVar="nZLLCand")
+            self.out.branch("ZLLCand_cosThetaStar", "F", lenVar="nZLLCand")
+            self.out.branch("ZLLCand_delPhi12", "F", lenVar="nZLLCand")
+            self.out.branch("ZLLCand_delPhi34", "F", lenVar="nZLLCand")
 
         if self.addZLCR :            
             self.out.branch("ZLCand_lepIdx", "S", title="Index of extra lep for the ZL CR")
@@ -531,13 +538,13 @@ class ZZFiller(Module):
             ZZCand_KD[iZZ] = ZZ.KD
             ZZCand_Z2sumpt[iZZ] = ZZ.Z2.sumpt()
 
-            ang_vars = AngularVars(ZZ)
+            zz_ang = AngularVars(ZZ)
 
-            ZZCand_cosTheta1[iZZ] = ang_vars.get_cosTheta()
-            ZZCand_cosTheta3[iZZ] = ang_vars.get_cosTheta(theta=3)
-            ZZCand_cosThetaStar[iZZ] = ang_vars.get_cosThetaStar()
-            ZZCand_delPhi12[iZZ] = ang_vars.get_delPhi()
-            ZZCand_delPhi34[iZZ] = ang_vars.get_delPhi(z=2)
+            ZZCand_cosTheta1[iZZ] = zz_ang.get_cosTheta()
+            ZZCand_cosTheta3[iZZ] = zz_ang.get_cosTheta(theta=3)
+            ZZCand_cosThetaStar[iZZ] = zz_ang.get_cosThetaStar()
+            ZZCand_delPhi12[iZZ] = zz_ang.get_delPhi()
+            ZZCand_delPhi34[iZZ] = zz_ang.get_delPhi(z=2)
 
             if self.year < 2022 : #FIXME
                 if self.isMC: ZZCand_wDataMC[iZZ] =  self.getDataMCWeight(ZZ.leps())
@@ -621,6 +628,12 @@ class ZZFiller(Module):
             ZLLCand_Z2l2Idx = [-1]*len(ZLLs)
             ZLLCand_KD     = [0.]*len(ZLLs)
 
+            ZLLCand_cosTheta1 = [0.]*len(ZLLs)
+            ZLLCand_cosTheta3 = [0.]*len(ZLLs)
+            ZLLCand_cosThetaStar = [0.]*len(ZLLs)
+            ZLLCand_delPhi12 = [0.]*len(ZLLs)
+            ZLLCand_delPhi34 = [0.]*len(ZLLs)
+
             for iZLL, ZLL in enumerate(ZLLs) :
                 ZLLCand_mass[iZLL] = ZLL.p4.M()
                 ZLLCand_massPreFSR[iZLL] = ZLL.massPreFSR()
@@ -648,6 +661,13 @@ class ZZFiller(Module):
                 ZLLCand_Z2l2Idx[iZLL] = ZLL.Z2.l2Idx
                 ZLLCand_KD[iZLL] = ZLL.KD
 
+                zll_ang = AngularVars(ZLL)
+                ZLLCand_cosTheta1[iZLL]   = zll_ang.get_cosTheta()
+                ZLLCand_cosTheta3[iZLL]   = zll_ang.get_cosTheta(theta=3)
+                ZLLCand_cosThetaStar[iZLL] = zll_ang.get_cosThetaStar()
+                ZLLCand_delPhi12[iZLL]    = zll_ang.get_delPhi()
+                ZLLCand_delPhi34[iZLL]    = zll_ang.get_delPhi(z=2)
+
             self.out.fillBranch("ZLLCand_mass",   ZLLCand_mass)
             self.out.fillBranch("ZLLCand_massPreFSR",   ZLLCand_massPreFSR)
 
@@ -674,6 +694,13 @@ class ZZFiller(Module):
             self.out.fillBranch("ZLLCand_Z2l1Idx", ZLLCand_Z2l1Idx)
             self.out.fillBranch("ZLLCand_Z2l2Idx", ZLLCand_Z2l2Idx)
             self.out.fillBranch("ZLLCand_KD",     ZLLCand_KD)
+
+            self.out.fillBranch("ZLLCand_cosTheta1", ZLLCand_cosTheta1)
+            self.out.fillBranch("ZLLCand_cosTheta3", ZLLCand_cosTheta3)
+            self.out.fillBranch("ZLLCand_cosThetaStar", ZLLCand_cosThetaStar)
+            self.out.fillBranch("ZLLCand_delPhi12", ZLLCand_delPhi12)
+            self.out.fillBranch("ZLLCand_delPhi34", ZLLCand_delPhi34)
+
             if self.addSSCR :
                 self.out.fillBranch("ZLLbestSSIdx",  bestSSCRIdx)
             if self.addOSCR :
