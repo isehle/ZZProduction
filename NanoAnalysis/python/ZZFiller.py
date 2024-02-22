@@ -245,7 +245,7 @@ class ZZFiller(Module):
             self.out.branch("ZLLCand_Z2eta", "F", lenVar="nZLLCand")
             self.out.branch("ZLLCand_Z2phi", "F", lenVar="nZLLCand")
 
-            self.out.branch("ZLLCand_Z2flav", "S", lenVar="nZLLCand")
+            self.out.branch("ZLLCand_Z2flav", "I", lenVar="nZLLCand")
             self.out.branch("ZLLCand_Z1l1Idx", "S", lenVar="nZLLCand") 
             self.out.branch("ZLLCand_Z1l2Idx", "S", lenVar="nZLLCand")
             self.out.branch("ZLLCand_Z2l1Idx", "S", lenVar="nZLLCand")
