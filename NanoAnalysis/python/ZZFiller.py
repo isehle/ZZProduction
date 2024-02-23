@@ -383,7 +383,11 @@ class ZZFiller(Module):
                                 
                 # Only one candidate per method should be selected per event: check if
                 if best2P2FCRIdx >= 0 and best3P1FCRIdx >= 0 :
-                    print ('WARNING: event {}:{}:{} has CR candidates in both 2P2F and 3P1F regions'.format(event.run,event.luminosityBlock,event.event))   #FIXME choose the best among the two
+                    # Should share their signal Z
+                    if ZLLsTemp[best2P2FCRIdx].Z1 == ZLLsTemp[best3P1FCRIdx].Z1:
+                        ZLLsTemp  = self.bestZLL(ZLLsTemp, best2P2FCRIdx, best3P1FCRIdx)
+                    else:
+                        print ('WARNING: event {}:{}:{} has CR candidates in both 2P2F and 3P1F regions'.format(event.run,event.luminosityBlock,event.event))   #FIXME choose the best among the two
 
                 # Store only ZLL candidates that belong to at least 1 CR
                 for iZLL, ZLL in enumerate(ZLLsTemp) :
@@ -807,6 +811,15 @@ class ZZFiller(Module):
             return self.bestCandByZ1Z2(a,b)
         if a.KD > b.KD : return -1 # choose by best dbkgkin
         else: return 1
+
+    def bestZLL(self, cands, best2p, best3p):
+        diff_2p = abs(cands[best2p].Z2.M - self.ZmassValue)
+        diff_3p = abs(cands[best3p].Z2.M - self.ZmassValue)
+        if diff_2p < diff_3p:
+            del cands[best3p]
+        else:
+            del cands[best2p]
+        return cands
         
 
     # Build a ZZ object from given Za, Zb pair, if it passes selection cuts; None is returned otherwise.
